@@ -151,6 +151,16 @@ jobs:
               --notes-file dist/RELEASE_NOTES.md
           fi
 
+      - name: Point release tag to current commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" \
+            -f sha="$GITHUB_SHA" \
+            -F force=true >/dev/null
+
       - name: Remove signing key
         if: always()
         shell: bash
