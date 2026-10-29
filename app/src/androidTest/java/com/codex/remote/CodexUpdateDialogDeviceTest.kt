@@ -28,8 +28,8 @@ class CodexUpdateDialogDeviceTest {
         val state = mutableStateOf(
             AppUpdateState(
                 phase = UpdatePhase.AVAILABLE,
-                versionCode = 22,
-                versionName = "1.0.13",
+                versionCode = 23,
+                versionName = "1.0.14",
                 changelog = "改善更新体验。",
                 showDialog = true,
             ),
@@ -37,8 +37,8 @@ class CodexUpdateDialogDeviceTest {
         var downloads = 0
         show(state, onDownload = { downloads += 1 })
 
-        composeRule.onNodeWithText("Codex 1.0.13").assertIsDisplayed()
-        composeRule.onNodeWithText("1.0.12  →  1.0.13").assertIsDisplayed()
+        composeRule.onNodeWithText("Codex 1.0.14").assertIsDisplayed()
+        composeRule.onNodeWithText("1.0.13  →  1.0.14").assertIsDisplayed()
         composeRule.onNodeWithTag("update-action-download").performClick()
         composeRule.runOnIdle { assertEquals(1, downloads) }
     }
@@ -48,8 +48,8 @@ class CodexUpdateDialogDeviceTest {
         val state = mutableStateOf(
             AppUpdateState(
                 phase = UpdatePhase.READY,
-                versionCode = 22,
-                versionName = "1.0.13",
+                versionCode = 23,
+                versionName = "1.0.14",
                 progressPercent = 100,
                 showDialog = true,
             ),
@@ -68,8 +68,8 @@ class CodexUpdateDialogDeviceTest {
         val state = mutableStateOf(
             AppUpdateState(
                 phase = UpdatePhase.ERROR,
-                versionCode = 22,
-                versionName = "1.0.13",
+                versionCode = 23,
+                versionName = "1.0.14",
                 error = "更新包 SHA-256 校验失败",
                 failureStage = UpdateFailureStage.DOWNLOAD,
                 showDialog = true,
@@ -93,7 +93,7 @@ class CodexUpdateDialogDeviceTest {
             CodexRemoteTheme(darkTheme = false) {
                 CodexUpdateDialog(
                     state = state.value,
-                    currentVersionName = "1.0.12",
+                    currentVersionName = "1.0.13",
                     onDismiss = {},
                     onDownload = onDownload,
                     onInstall = onInstall,

@@ -341,7 +341,11 @@ class GitHubUpdateClient(
         const val MAX_REDIRECTS = 5
         const val MANIFEST_PATH = "/jiurag/codex-android/releases/latest/download/latest.json"
         const val APK_RELEASE_PATH_PREFIX = "/jiurag/codex-android/releases/download/"
-        val MANIFEST_HOSTS = setOf("github.com")
+        val MANIFEST_HOSTS = setOf(
+            "github.com",
+            "objects.githubusercontent.com",
+            "release-assets.githubusercontent.com",
+        )
         val DOWNLOAD_HOSTS = setOf(
             "github.com",
             "objects.githubusercontent.com",
