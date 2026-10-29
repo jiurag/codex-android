@@ -43,7 +43,7 @@ class SecretCipher {
     fun decrypt(value: String): String {
         if (value.isEmpty()) return ""
         val payload = Base64.decode(value, Base64.NO_WRAP)
-        require(payload.size > 12) { "Invalid encrypted connection secret" }
+        require(payload.size > 12) { "加密连接凭据无效" }
         val iv = payload.copyOfRange(0, 12)
         val ciphertext = payload.copyOfRange(12, payload.size)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")

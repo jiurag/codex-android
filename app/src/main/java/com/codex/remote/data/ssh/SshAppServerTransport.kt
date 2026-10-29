@@ -6,7 +6,10 @@ import com.codex.remote.domain.ConnectionSecrets
 import com.codex.remote.domain.RemotePlatform
 import com.codex.remote.domain.SavedConnection
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
+import net.schmizz.keepalive.KeepAliveProvider
+import net.schmizz.keepalive.KeepAliveRunner
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.DefaultSecurityProviderConfig
 import net.schmizz.sshj.common.Buffer
@@ -23,6 +26,12 @@ import java.security.PublicKey
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 
+data class RemoteCommandResult(
+    val exitStatus: Int,
+    val stdout: String,
+    val stderr: String,
+)
+
 class HostKeyChangedException(
     expected: String,
     actual: String,
@@ -32,6 +41,9 @@ class UnknownHostKeyException(val fingerprint: String) :
     SecurityException("首次连接需要确认 SSH 主机指纹：$fingerprint")
 
 class RemoteCodexUnavailableException(message: String) : IllegalStateException(message)
+
+class RemoteConnectionLostException(cause: Throwable? = null) :
+    IllegalStateException("SSH 连接已断开，请重新连接。", cause)
 
 class ActiveSshTransport internal constructor(
     private val ssh: SSHClient,
@@ -44,6 +56,40 @@ class ActiveSshTransport internal constructor(
     val reader: BufferedReader = BufferedReader(InputStreamReader(command.inputStream, Charsets.UTF_8))
     val writer: BufferedWriter = BufferedWriter(OutputStreamWriter(command.outputStream, Charsets.UTF_8))
     val errorReader: BufferedReader = BufferedReader(InputStreamReader(command.errorStream, Charsets.UTF_8))
+    val isConnected: Boolean
+        get() = ssh.isConnected
+
+    suspend fun runCommand(commandLine: String, timeoutSeconds: Long = 15): RemoteCommandResult =
+        withContext(Dispatchers.IO) {
+            try {
+                if (!ssh.isConnected) throw RemoteConnectionLostException()
+                val commandSession = ssh.startSession()
+                try {
+                    val command = commandSession.exec(commandLine)
+                    try {
+                        command.join(timeoutSeconds, TimeUnit.SECONDS)
+                        if (command.isOpen) {
+                            throw RemoteCodexUnavailableException("远端状态查询超时")
+                        }
+                        RemoteCommandResult(
+                            exitStatus = command.exitStatus ?: -1,
+                            stdout = command.inputStream.bufferedReader(Charsets.UTF_8).readText(),
+                            stderr = command.errorStream.bufferedReader(Charsets.UTF_8).readText(),
+                        )
+                    } finally {
+                        runCatching { command.close() }
+                    }
+                } finally {
+                    runCatching { commandSession.close() }
+                }
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                if (error is RemoteConnectionLostException || isRemoteConnectionLost(error, ssh.isConnected)) {
+                    throw RemoteConnectionLostException(error)
+                }
+                throw error
+            }
+        }
 
     override fun close() {
         runCatching { writer.close() }
@@ -93,6 +139,7 @@ class SshAppServerTransportFactory(private val context: Context) {
         onFingerprint: (String) -> Unit,
     ): SSHClient {
         val ssh = SSHClient(androidCompatibleSshConfig())
+        configureSshKeepAlive(ssh)
         var unknownFingerprint: String? = null
         var changedFingerprint: String? = null
         ssh.connectTimeout = 15_000
@@ -218,14 +265,14 @@ class SshAppServerTransportFactory(private val context: Context) {
 }
 
 internal fun codexVersionCommand(platform: RemotePlatform): String = when (platform) {
-    RemotePlatform.AUTO -> error("AUTO platform must be resolved before building a Codex command")
+    RemotePlatform.AUTO -> error("构建 Codex 命令前必须先识别远端系统")
     RemotePlatform.POSIX -> "exec \"\${SHELL:-/bin/sh}\" -lc 'codex --version'"
     RemotePlatform.WINDOWS ->
         "powershell.exe -NoLogo -NonInteractive -Command \"& { codex --version }\""
 }
 
 internal fun appServerCommand(platform: RemotePlatform): String = when (platform) {
-    RemotePlatform.AUTO -> error("AUTO platform must be resolved before building a Codex command")
+    RemotePlatform.AUTO -> error("构建 Codex 命令前必须先识别远端系统")
     RemotePlatform.POSIX ->
         "exec \"\${SHELL:-/bin/sh}\" -lc 'exec codex app-server --listen stdio://'"
     RemotePlatform.WINDOWS ->
@@ -236,4 +283,41 @@ internal fun androidCompatibleSshConfig() = DefaultSecurityProviderConfig().appl
     keyExchangeFactories = keyExchangeFactories.filterNot {
         it.name.contains("curve25519", ignoreCase = true)
     }
+    setKeepAliveProvider(KeepAliveProvider.KEEP_ALIVE)
 }
+
+internal fun configureSshKeepAlive(ssh: SSHClient) {
+    ssh.connection.keepAlive.keepAliveInterval = SSH_KEEP_ALIVE_INTERVAL_SECONDS
+    (ssh.connection.keepAlive as? KeepAliveRunner)?.maxAliveCount = SSH_KEEP_ALIVE_MAX_MISSES
+}
+
+internal fun Throwable.isRemoteConnectionLost(): Boolean =
+    generateSequence(this) { error -> error.cause }.any { error ->
+        error is RemoteConnectionLostException || isRemoteConnectionLostMessage(error.message.orEmpty())
+    }
+
+internal fun isRemoteConnectionLost(error: Throwable, connected: Boolean): Boolean =
+    !connected || error.isRemoteConnectionLost()
+
+private fun isRemoteConnectionLostMessage(message: String): Boolean {
+    if (message.isBlank()) return false
+    val normalized = message.lowercase()
+    return REMOTE_CONNECTION_LOST_MESSAGES.any(normalized::contains)
+}
+
+private const val SSH_KEEP_ALIVE_INTERVAL_SECONDS = 30
+private const val SSH_KEEP_ALIVE_MAX_MISSES = 3
+
+private val REMOTE_CONNECTION_LOST_MESSAGES = listOf(
+    "not connected",
+    "connection lost",
+    "connection reset",
+    "connection is closed",
+    "broken pipe",
+    "socket closed",
+    "transport is not running",
+    "did not receive any keep-alive response",
+    "远端 app-server 已断开",
+    "远端连接已关闭",
+    "ssh 数据流已中断",
+)

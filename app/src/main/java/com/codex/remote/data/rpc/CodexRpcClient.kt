@@ -103,6 +103,9 @@ class RpcException(message: String, val code: Int? = null) : Exception(message)
 class CodexRpcClient(
     private val transport: ActiveSshTransport,
 ) : Closeable {
+    val isConnected: Boolean
+        get() = transport.isConnected
+
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val requestId = AtomicLong(1)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JsonObject>>()
@@ -246,7 +249,7 @@ class CodexRpcClient(
     suspend fun unarchiveThread(threadId: String): RemoteThread {
         val result = request("thread/unarchive", threadMutationParams(threadId))
         return result["thread"]?.let(::parseThread)
-            ?: throw RpcException("thread/unarchive did not return thread")
+            ?: throw RpcException("thread/unarchive 未返回会话")
     }
 
     suspend fun deleteThread(threadId: String) {
@@ -259,7 +262,7 @@ class CodexRpcClient(
             put("isPinned", isPinned)
         })
         return result["thread"]?.let(::parseThread)
-            ?: throw RpcException("thread/metadata/update did not return thread")
+            ?: throw RpcException("thread/metadata/update 未返回会话")
     }
 
     suspend fun compactThread(threadId: String) {
@@ -370,7 +373,7 @@ class CodexRpcClient(
             threadId?.let { put("threadId", it) }
         })
         return result.string("authorizationUrl")
-            ?: throw RpcException("mcpServer/oauth/login did not return authorizationUrl")
+            ?: throw RpcException("mcpServer/oauth/login 未返回授权地址")
     }
 
     suspend fun reloadMcpServers() {
@@ -403,7 +406,7 @@ class CodexRpcClient(
     }
 
     suspend fun startThread(
-        cwd: String,
+        cwd: String?,
         model: String?,
         serviceTier: String?,
         approvalPolicy: String,
@@ -419,7 +422,9 @@ class CodexRpcClient(
             model = result.string("model") ?: model,
             reasoningEffort = result.string("reasoningEffort"),
             serviceTier = result.string("serviceTier") ?: serviceTier,
-            cwd = result.string("cwd") ?: cwd,
+            cwd = result.string("cwd")?.takeIf(String::isNotBlank)
+                ?: cwd?.takeIf(String::isNotBlank)
+                ?: throw RpcException("thread/start 未返回 cwd"),
         )
     }
 
@@ -857,7 +862,7 @@ class CodexRpcClient(
         internal fun initializeParams(): JsonObject = buildJsonObject {
             put("clientInfo", buildJsonObject {
                 put("name", "codex_remote_android")
-                put("title", "Codex Remote for Android")
+                put("title", "Codex")
                 put("version", BuildConfig.VERSION_NAME)
             })
             put("capabilities", buildJsonObject {
@@ -920,14 +925,14 @@ class CodexRpcClient(
         }
 
         internal fun threadStartParams(
-            cwd: String,
+            cwd: String?,
             model: String?,
             serviceTier: String? = null,
             approvalPolicy: String,
             approvalsReviewer: String = "user",
             permissionProfile: String? = null,
         ): JsonObject = buildJsonObject {
-            put("cwd", cwd)
+            if (!cwd.isNullOrBlank()) put("cwd", cwd)
             put("approvalPolicy", approvalPolicy)
             put("approvalsReviewer", approvalsReviewer)
             if (permissionProfile.isNullOrBlank()) {
@@ -1066,8 +1071,9 @@ class CodexRpcClient(
             if (!model.isNullOrBlank()) put("model", model)
             if (!reasoningEffort.isNullOrBlank()) put("effort", reasoningEffort)
             if (!serviceTier.isNullOrBlank()) put("serviceTier", serviceTier)
-            if (collaborationMode != null && !model.isNullOrBlank()) {
-                put("collaborationMode", collaborationModeParam(collaborationMode, model, reasoningEffort))
+            val wireMode = collaborationMode?.mode
+            if (wireMode != null && !model.isNullOrBlank()) {
+                put("collaborationMode", collaborationModeParam(collaborationMode, wireMode, model, reasoningEffort))
             }
             put("input", userInputs(text, mentions, attachments))
         }
@@ -1113,10 +1119,11 @@ class CodexRpcClient(
 
         private fun collaborationModeParam(
             collaborationMode: RemoteCollaborationMode,
+            mode: String,
             model: String,
             reasoningEffort: String?,
         ): JsonObject = buildJsonObject {
-            put("mode", collaborationMode.mode)
+            put("mode", mode)
             put("settings", buildJsonObject {
                 put("model", collaborationMode.model ?: model)
                 val effort = collaborationMode.reasoningEffort ?: reasoningEffort
@@ -1164,10 +1171,10 @@ class CodexRpcClient(
 
         internal fun parseCollaborationMode(element: JsonElement): RemoteCollaborationMode? {
             val mode = element.asObject() ?: return null
-            val wireMode = mode.string("mode") ?: return null
+            val name = mode.string("name") ?: return null
             return RemoteCollaborationMode(
-                name = mode.string("name") ?: wireMode,
-                mode = wireMode,
+                name = name,
+                mode = mode.string("mode"),
                 model = mode.string("model"),
                 reasoningEffort = mode.string("reasoning_effort") ?: mode.string("reasoningEffort"),
             )
@@ -1301,8 +1308,8 @@ class CodexRpcClient(
                         val content = contentElement.asObject() ?: return@mapNotNull null
                         when (content.string("type")) {
                             "text" -> content.string("text")
-                            "image", "localImage" -> "[Image]"
-                            "audio", "localAudio" -> "[Audio]"
+                            "image", "localImage" -> "[图片]"
+                            "audio", "localAudio" -> "[音频]"
                             "skill", "mention" -> content.string("name")?.let { "\$$it" }
                             else -> null
                         }
@@ -1355,44 +1362,75 @@ class CodexRpcClient(
                         ?: item["result"]?.toString().orEmpty(),
                     status = item.string("status").orEmpty(),
                 )
+                "functionCallOutput" -> TimelineItem(
+                    id,
+                    TimelineKind.TOOL,
+                    title = "函数输出：${item.string("name").orEmpty().ifBlank { "未命名函数" }}",
+                    body = when (val output = item["output"]) {
+                        is JsonPrimitive -> output.contentOrNull.orEmpty()
+                        is JsonArray -> output.mapNotNull { content ->
+                            content.asObject()?.let { entry ->
+                                entry.string("text")
+                                    ?: entry.string("image_url")?.let { "图片：$it" }
+                                    ?: entry.string("audio_url")?.let { "音频：$it" }
+                                    ?: entry.string("file_id")?.let { "文件：$it" }
+                            }
+                        }.joinToString("\n")
+                        else -> output?.toString().orEmpty()
+                    },
+                )
                 "subAgentActivity" -> TimelineItem(
                     id,
                     TimelineKind.TOOL,
-                    title = "Sub-agent ${item.string("kind").orEmpty()}",
+                    title = "子代理 ${item.string("kind").orEmpty()}",
                     body = item.string("agentPath").orEmpty(),
                 )
                 "webSearch" -> TimelineItem(
                     id,
                     TimelineKind.TOOL,
-                    title = "Web search",
+                    title = "网络搜索",
                     body = item.string("query").orEmpty(),
                 )
                 "imageView" -> TimelineItem(
                     id,
                     TimelineKind.TOOL,
-                    title = "Viewed image",
+                    title = "查看图片",
                     body = item.string("path").orEmpty(),
                 )
                 "imageGeneration" -> TimelineItem(
                     id,
                     TimelineKind.TOOL,
-                    title = "Image generation",
+                    title = "生成图片",
                     body = item.string("savedPath") ?: item.string("revisedPrompt").orEmpty(),
                     status = item.string("status").orEmpty(),
                 )
                 "enteredReviewMode", "exitedReviewMode" -> TimelineItem(
                     id,
                     TimelineKind.REVIEW,
-                    title = if (type == "enteredReviewMode") "Code review started" else "Code review completed",
+                    title = if (type == "enteredReviewMode") "开始代码审查" else "代码审查已完成",
                     body = item.string("review").orEmpty(),
                 )
                 "contextCompaction" -> TimelineItem(
                     id,
                     TimelineKind.COMPACTION,
-                    title = "Context compacted",
+                    title = "上下文已压缩",
                 )
-                "hookPrompt" -> TimelineItem(id, TimelineKind.TOOL, title = "Hook", body = "Prompt context added")
-                "sleep" -> TimelineItem(id, TimelineKind.TOOL, title = "Wait", body = "Codex waited before continuing")
+                "hookPrompt" -> TimelineItem(
+                    id,
+                    TimelineKind.TOOL,
+                    title = "钩子",
+                    body = item.array("fragments")
+                        .mapNotNull { fragment -> fragment.asObject()?.string("text") }
+                        .joinToString("\n")
+                        .ifBlank { "已添加上下文提示" },
+                )
+                "sleep" -> TimelineItem(
+                    id,
+                    TimelineKind.TOOL,
+                    title = "等待",
+                    body = item["durationMs"]?.jsonPrimitive?.longOrNull?.let { "Codex 等待了 $it 毫秒" }
+                        ?: "Codex 在继续前进行了等待",
+                )
                 else -> null
             }
         }

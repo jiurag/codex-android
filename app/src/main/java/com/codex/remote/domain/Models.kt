@@ -157,7 +157,7 @@ private fun remoteProjectIdentity(path: String): String {
 }
 
 private fun remoteProjectName(path: String): String {
-    if (path.isEmpty()) return "Unknown workspace"
+    if (path.isEmpty()) return "未知工作区"
     if (path == "/" || (path.length == 3 && path[1] == ':')) return path
     val separator = maxOf(path.lastIndexOf('/'), path.lastIndexOf('\\'))
     return path.substring(separator + 1).ifBlank { path }
@@ -189,7 +189,7 @@ data class RemoteServiceTier(
 
 data class RemoteCollaborationMode(
     val name: String,
-    val mode: String,
+    val mode: String?,
     val model: String? = null,
     val reasoningEffort: String? = null,
 )
@@ -298,6 +298,23 @@ data class RemoteRateLimits(
     val secondary: RateLimitWindowSnapshot?,
     val creditsBalance: String?,
     val creditsUnlimited: Boolean,
+)
+
+data class CcSwitchQuotaSnapshot(
+    val planName: String?,
+    val remaining: String?,
+    val unit: String?,
+    val isValid: Boolean?,
+)
+
+data class CcSwitchRemoteStatus(
+    val providerId: String,
+    val providerName: String,
+    val status: String?,
+    val available: Boolean?,
+    val queriedAt: Long?,
+    val quotas: List<CcSwitchQuotaSnapshot>,
+    val error: String?,
 )
 
 data class RemoteThreadTokenUsage(
@@ -430,6 +447,7 @@ data class AppUiState(
     val isFeedbackSubmitting: Boolean = false,
     val feedbackError: String? = null,
     val rateLimits: RemoteRateLimits? = null,
+    val ccSwitchStatus: CcSwitchRemoteStatus? = null,
     val threadTokenUsage: RemoteThreadTokenUsage? = null,
     val isStatusLoading: Boolean = false,
     val statusError: String? = null,

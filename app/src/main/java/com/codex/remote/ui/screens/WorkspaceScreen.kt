@@ -1,5 +1,9 @@
 package com.codex.remote.ui.screens
 
+import com.codex.remote.localizeCodexMessage
+import com.codex.remote.localizeCodexDescription
+import com.codex.remote.localizeCodexLabel
+import android.app.Activity
 import android.content.Context
 import android.text.method.LinkMovementMethod
 import android.net.Uri
@@ -36,6 +40,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -49,52 +54,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
-import androidx.compose.material.icons.automirrored.outlined.CallSplit
-import androidx.compose.material.icons.automirrored.outlined.List
-import androidx.compose.material.icons.automirrored.outlined.Send
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Archive
-import androidx.compose.material.icons.outlined.AttachFile
-import androidx.compose.material.icons.outlined.Build
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Computer
-import androidx.compose.material.icons.outlined.Compress
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Extension
-import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.Flag
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Hub
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.KeyboardHide
-import androidx.compose.material.icons.outlined.Menu
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Pause
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Psychology
-import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.SmartToy
-import androidx.compose.material.icons.outlined.Stop
-import androidx.compose.material.icons.outlined.Terminal
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.outlined.Unarchive
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.DrawerValue
@@ -107,7 +66,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -117,9 +75,9 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -139,9 +97,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.viewinterop.AndroidView
@@ -152,9 +111,15 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.content.res.ResourcesCompat
+import com.codex.remote.R
 import com.codex.remote.domain.AppUiState
 import com.codex.remote.domain.ApprovalKind
 import com.codex.remote.domain.ConnectionStatus
+import com.codex.remote.domain.CcSwitchQuotaSnapshot
+import com.codex.remote.domain.CcSwitchRemoteStatus
 import com.codex.remote.domain.ComposerMention
 import com.codex.remote.domain.ComposerMentionKind
 import com.codex.remote.domain.ComposerImageAttachment
@@ -172,8 +137,20 @@ import com.codex.remote.domain.ThreadGoal
 import com.codex.remote.domain.ThreadGoalStatus
 import com.codex.remote.domain.composerToken
 import com.codex.remote.domain.findComposerTrigger
+import com.codex.remote.domain.formatComposerBalance
 import com.codex.remote.domain.replaceComposerTrigger
+import com.codex.remote.ui.icons.CodexIcons
+import com.codex.remote.ui.components.CodexButton
+import com.codex.remote.ui.components.CodexBrandMark
+import com.codex.remote.ui.components.CodexDialog as AlertDialog
+import com.codex.remote.ui.components.CodexMenuHeading
+import com.codex.remote.ui.components.CodexOutlinedButton
+import com.codex.remote.ui.components.CodexTextButton as TextButton
+import com.codex.remote.ui.components.CodexTopBar
+import com.codex.remote.ui.components.codexTextFieldColors
+import com.codex.remote.ui.theme.CodexDarkSurfaceTheme
 import com.codex.remote.ui.theme.CodexGreen
+import com.codex.remote.ui.theme.CodexNight
 import com.codex.remote.ui.theme.DiffGreen
 import com.codex.remote.ui.theme.DiffRed
 import com.codex.remote.ui.theme.MonoText
@@ -236,12 +213,22 @@ fun WorkspaceScreen(
     onDismissNotice: () -> Unit,
 ) {
     val drawerState = androidx.compose.material3.rememberDrawerState(DrawerValue.Closed)
+    val drawerVisible = drawerState.targetValue == DrawerValue.Open || drawerState.currentValue != DrawerValue.Closed
+    val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
+    val view = LocalView.current
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     var renameTarget by remember { mutableStateOf<RemoteThread?>(null) }
     var archiveTarget by remember { mutableStateOf<RemoteThread?>(null) }
     var showArchivedTasks by remember { mutableStateOf(false) }
     var deleteArchivedTarget by remember { mutableStateOf<RemoteThread?>(null) }
+    SideEffect {
+        val window = (view.context as? Activity)?.window ?: return@SideEffect
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !drawerVisible && !isDarkTheme
+            isAppearanceLightNavigationBars = !drawerVisible && !isDarkTheme
+        }
+    }
     LaunchedEffect(state.mcpAuthorizationUrl) {
         val authorizationUrl = state.mcpAuthorizationUrl ?: return@LaunchedEffect
         try {
@@ -254,7 +241,7 @@ fun WorkspaceScreen(
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 840.dp
         if (wide) {
-            Row(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 WorkspaceSidebar(
                     state = state,
                     modifier = Modifier.width(286.dp).fillMaxHeight(),
@@ -313,7 +300,7 @@ fun WorkspaceScreen(
                 drawerContent = {
                     ModalDrawerSheet(
                         modifier = Modifier.width(304.dp),
-                        drawerContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        drawerContainerColor = MaterialTheme.colorScheme.background,
                     ) {
                         WorkspaceSidebar(
                             state = state,
@@ -382,6 +369,23 @@ fun WorkspaceScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+        }
+        if (!wide && drawerVisible) {
+            val density = LocalDensity.current
+            val statusBarHeight = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
+            val navigationBarHeight = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
+            Box(
+                Modifier.align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height(statusBarHeight)
+                    .background(CodexNight),
+            )
+            Box(
+                Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(navigationBarHeight)
+                    .background(CodexNight),
+            )
         }
     }
 
@@ -476,150 +480,166 @@ private fun WorkspaceSidebar(
             }
         }
     }
-    Column(modifier.background(MaterialTheme.colorScheme.surfaceVariant).statusBarsPadding()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Outlined.Psychology, contentDescription = null, modifier = Modifier.size(23.dp))
-            Spacer(Modifier.width(9.dp))
-            Text("Codex", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-        }
-        SidebarAction(Icons.Outlined.Add, "New task", onNewThread)
-        SidebarAction(Icons.Outlined.Archive, "Archived tasks", onOpenArchivedTasks)
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-            placeholder = { Text("Search tasks") },
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Clear search", modifier = Modifier.size(17.dp))
-                    }
-                }
-            },
-            singleLine = true,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "PROJECTS",
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
-            if (displayedProjects.isEmpty()) {
-                item(key = "empty-projects") {
+    CodexDarkSurfaceTheme {
+        Column(modifier.background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 10.dp, top = 14.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CodexBrandMark(modifier = Modifier.size(30.dp))
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Codex", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        if (searchQuery.isBlank()) "No Codex conversations found" else "No matching tasks",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 14.dp),
+                        state.activeConnection?.name ?: "未连接主机",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            displayedProjects.forEach { project ->
-                item(key = "project-${project.id}") {
-                    val expanded = searchQuery.isNotBlank() || expandedProjects[project.id] == true
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp))
-                            .clickable { expandedProjects[project.id] = !expanded }
-                            .padding(horizontal = 10.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
-                            contentDescription = if (expanded) "Collapse project" else "Expand project",
-                            modifier = Modifier.size(17.dp),
-                        )
-                        Spacer(Modifier.width(5.dp))
-                        Icon(Icons.Outlined.FolderOpen, contentDescription = null, modifier = Modifier.size(17.dp))
-                        Spacer(Modifier.width(9.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                project.name,
-                                style = MaterialTheme.typography.labelLarge,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (expanded) Text(
-                                project.path,
-                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                SidebarAction(
+                    icon = CodexIcons.Add,
+                    label = "新建会话",
+                    onClick = onNewThread,
+                    modifier = Modifier.weight(1f),
+                    emphasized = true,
+                )
+                SidebarAction(
+                    icon = CodexIcons.Archive,
+                    label = "已归档",
+                    onClick = onOpenArchivedTasks,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                placeholder = { Text("搜索项目和任务") },
+                leadingIcon = { Icon(CodexIcons.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(CodexIcons.Close, contentDescription = "清除搜索", modifier = Modifier.size(17.dp))
                         }
+                    }
+                },
+                singleLine = true,
+                shape = MaterialTheme.shapes.small,
+                colors = codexTextFieldColors(),
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "项目与任务",
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
+                if (displayedProjects.isEmpty()) {
+                    item(key = "empty-projects") {
                         Text(
-                            project.threads.size.toString(),
-                            style = MaterialTheme.typography.labelSmall,
+                            if (searchQuery.isBlank()) "没有找到 Codex 会话" else "没有匹配的任务",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 14.dp),
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-                if (searchQuery.isNotBlank() || expandedProjects[project.id] == true) {
-                    item(key = "new-${project.id}") {
+                displayedProjects.forEach { project ->
+                    item(key = "project-${project.id}") {
+                        val expanded = searchQuery.isNotBlank() || expandedProjects[project.id] == true
+                        val selected = state.selectedProjectPath == project.path && state.selectedThreadId == null
                         Row(
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp))
-                                .clickable {
-                                    onSelectProject(project)
-                                    onNewThread()
-                                }
-                                .padding(start = 38.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                )
+                                .padding(start = 2.dp, end = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("New task", style = MaterialTheme.typography.bodyMedium)
+                            Box(
+                                modifier = Modifier.size(48.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { expandedProjects[project.id] = !expanded },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    if (expanded) CodexIcons.ExpandMore else CodexIcons.ChevronRight,
+                                    contentDescription = if (expanded) "收起项目" else "展开项目",
+                                    modifier = Modifier.size(17.dp),
+                                )
+                            }
+                            Icon(CodexIcons.FolderOpen, contentDescription = null, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(9.dp))
+                            Column(
+                                modifier = Modifier.weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { onSelectProject(project) }
+                                    .padding(vertical = 8.dp),
+                            ) {
+                                Text(
+                                    project.name,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (expanded) Text(
+                                    project.path,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Text(
+                                project.threads.size.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
-                    items(project.threads, key = { "thread-${it.id}" }) { thread ->
-                        ThreadSidebarRow(
-                            thread = thread,
-                            selected = thread.id == state.selectedThreadId,
-                            onSelect = { onSelectThread(thread) },
-                            onRename = { onRenameThread(thread) },
-                            onArchive = { onArchiveThread(thread) },
-                            onSetPinned = { onSetThreadPinned(thread, it) },
-                        )
+                    if (searchQuery.isNotBlank() || expandedProjects[project.id] == true) {
+                        items(project.threads, key = { "thread-${it.id}" }) { thread ->
+                            ThreadSidebarRow(
+                                thread = thread,
+                                selected = thread.id == state.selectedThreadId,
+                                onSelect = { onSelectThread(thread) },
+                                onRename = { onRenameThread(thread) },
+                                onArchive = { onArchiveThread(thread) },
+                                onSetPinned = { onSetThreadPinned(thread, it) },
+                            )
+                        }
                     }
                 }
             }
-        }
-        HorizontalDivider()
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenConnections).padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Outlined.Computer, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(state.activeConnection?.name ?: "Remote host", style = MaterialTheme.typography.labelLarge)
-                Text(
-                    state.activeConnection?.let { "${it.username}@${it.host}" }.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-                Text(
-                    state.remoteAccount?.let { account ->
-                        account.email ?: account.planType ?: account.type ?: "Codex sign-in required"
-                    }.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (state.remoteAccount?.canRunCodex == false) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenConnections).padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(CodexIcons.Computer, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(state.activeConnection?.name ?: "远程主机", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        state.activeConnection?.let { "${it.username}@${it.host}" }.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+                Icon(CodexIcons.Settings, contentDescription = "连接设置", modifier = Modifier.size(18.dp))
             }
-            Icon(Icons.Outlined.Settings, contentDescription = "连接设置", modifier = Modifier.size(18.dp))
+            Spacer(Modifier.navigationBarsPadding())
         }
-        Spacer(Modifier.navigationBarsPadding())
     }
 }
 
@@ -634,13 +654,18 @@ private fun ThreadSidebarRow(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp))
-            .background(if (selected) MaterialTheme.colorScheme.surface else Color.Transparent)
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(6.dp))
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
             .clickable(onClick = onSelect)
-            .padding(start = 38.dp, end = 3.dp, top = 6.dp, bottom = 6.dp),
+            .padding(start = 30.dp, end = 3.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Outlined.Description, contentDescription = null, modifier = Modifier.size(15.dp))
+        Icon(
+            CodexIcons.Description,
+            contentDescription = null,
+            modifier = Modifier.size(15.dp),
+            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -658,8 +683,8 @@ private fun ThreadSidebarRow(
         }
         if (thread.isPinned) {
             Icon(
-                Icons.Outlined.PushPin,
-                contentDescription = "Pinned",
+                CodexIcons.PushPin,
+                contentDescription = "已置顶",
                 modifier = Modifier.size(14.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -670,7 +695,7 @@ private fun ThreadSidebarRow(
         }
         Box {
             IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(34.dp)) {
-                Icon(Icons.Outlined.MoreVert, contentDescription = "Task actions", modifier = Modifier.size(17.dp))
+                Icon(CodexIcons.MoreVert, contentDescription = "任务操作", modifier = Modifier.size(17.dp))
             }
             ThreadActionsMenu(
                 expanded = menuOpen,
@@ -708,57 +733,75 @@ private fun ThreadActionsMenu(
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(
-            text = { Text("Rename") },
-            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+            text = { Text("重命名") },
+            leadingIcon = { Icon(CodexIcons.Edit, contentDescription = null) },
             onClick = onRename,
         )
         onCompact?.let { compact ->
             DropdownMenuItem(
-                text = { Text("Compact context") },
-                leadingIcon = { Icon(Icons.Outlined.Compress, contentDescription = null) },
+                text = { Text("压缩上下文") },
+                leadingIcon = { Icon(CodexIcons.Compress, contentDescription = null) },
                 enabled = compactEnabled,
                 onClick = compact,
             )
         }
         onFork?.let { fork ->
             DropdownMenuItem(
-                text = { Text("Fork task") },
-                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.CallSplit, contentDescription = null) },
+                text = { Text("派生任务") },
+                leadingIcon = { Icon(CodexIcons.CallSplit, contentDescription = null) },
                 onClick = fork,
             )
         }
         onReview?.let { review ->
             DropdownMenuItem(
-                text = { Text("Review changes") },
-                leadingIcon = { Icon(Icons.Outlined.Code, contentDescription = null) },
+                text = { Text("审查变更") },
+                leadingIcon = { Icon(CodexIcons.Code, contentDescription = null) },
                 onClick = review,
             )
         }
         if (isPinned != null) {
             DropdownMenuItem(
-                text = { Text(if (isPinned) "Unpin" else "Pin") },
-                leadingIcon = { Icon(Icons.Outlined.PushPin, contentDescription = null) },
+                text = { Text(if (isPinned) "取消置顶" else "置顶") },
+                leadingIcon = { Icon(CodexIcons.PushPin, contentDescription = null) },
                 onClick = { onSetPinned(!isPinned) },
             )
         }
         DropdownMenuItem(
-            text = { Text("Archive") },
-            leadingIcon = { Icon(Icons.Outlined.Archive, contentDescription = null) },
+            text = { Text("归档") },
+            leadingIcon = { Icon(CodexIcons.Archive, contentDescription = null) },
             onClick = onArchive,
         )
     }
 }
 
 @Composable
-private fun SidebarAction(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun SidebarAction(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    emphasized: Boolean = false,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).clip(RoundedCornerShape(5.dp))
-            .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 10.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(6.dp))
+            .background(
+                if (emphasized) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+            )
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(19.dp))
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = if (emphasized) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        )
         Spacer(Modifier.width(10.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (emphasized) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -811,13 +854,23 @@ private fun WorkspaceContent(
     var followLatest by remember(conversationKey) { mutableStateOf(true) }
     var hasPositionedConversation by remember(conversationKey) { mutableStateOf(false) }
     val currentThread = state.threads.firstOrNull { it.id == state.selectedThreadId }
+    val headerTitle = currentThread?.title
+        ?: state.projects.firstOrNull { it.path == state.selectedProjectPath }?.name
+        ?: state.activeConnection?.name.orEmpty()
+    val selectedModelName = state.models.firstOrNull { it.id == state.selectedModel }?.displayName
+    val headerSubtitle = when (state.connectionStatus) {
+        ConnectionStatus.CONNECTED -> listOfNotNull("已连接", selectedModelName).joinToString(" · ")
+        ConnectionStatus.CONNECTING -> "正在通过 SSH 连接"
+        ConnectionStatus.ERROR -> "连接失败"
+        ConnectionStatus.DISCONNECTED -> "已断开"
+    }
     val canCompose = state.connectionStatus == ConnectionStatus.CONNECTED &&
         state.remoteAccount?.canRunCodex == true &&
         state.models.isNotEmpty() &&
         (state.selectedProjectPath?.isNotBlank() == true || state.selectedThreadId != null)
     LaunchedEffect(state.notice) {
         state.notice?.let {
-            snackbarHostState.showSnackbar(it)
+            snackbarHostState.showSnackbar(localizeCodexMessage(it))
             onDismissNotice()
         }
     }
@@ -833,56 +886,40 @@ private fun WorkspaceContent(
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            Surface(
-                modifier = Modifier.statusBarsPadding(),
-                color = MaterialTheme.colorScheme.background,
-            ) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (showMenu) {
-                            IconButton(onClick = onMenu) { Icon(Icons.Outlined.Menu, contentDescription = "打开会话") }
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                currentThread?.title
-                                    ?: state.projects.firstOrNull { it.path == state.selectedProjectPath }?.name
-                                    ?: state.activeConnection?.name.orEmpty(),
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            ConnectionIndicator(state)
-                        }
-                        if (currentThread != null) {
-                            ThreadHeaderOverflow(
-                                onRename = onRenameCurrentThread,
-                                onCompact = onCompactThread,
-                                compactEnabled = !state.isTurnRunning,
-                                onFork = onForkThread,
-                                onReview = { showReviewDialog = true },
-                                onArchive = onArchiveCurrentThread,
-                            )
-                        }
+            CodexTopBar(
+                title = headerTitle,
+                subtitle = headerSubtitle,
+                navigationIcon = {
+                    if (showMenu) {
+                        IconButton(onClick = onMenu) { Icon(CodexIcons.Menu, contentDescription = "打开会话") }
                     }
-                    HorizontalDivider()
-                }
-            }
+                },
+                actions = {
+                    if (currentThread != null && showMenu) {
+                        ThreadHeaderOverflow(
+                            onRename = onRenameCurrentThread,
+                            onCompact = onCompactThread,
+                            compactEnabled = !state.isTurnRunning,
+                            onFork = onForkThread,
+                            onReview = { showReviewDialog = true },
+                            onArchive = onArchiveCurrentThread,
+                        )
+                    }
+                },
+            )
         },
     ) { padding ->
         when (state.connectionStatus) {
             ConnectionStatus.CONNECTING -> ConnectionState(
                 icon = null,
-                title = "Connecting over SSH",
+                title = "正在通过 SSH 连接",
                 detail = state.connectionMessage,
                 loading = true,
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
             ConnectionStatus.ERROR -> ConnectionState(
-                icon = Icons.Outlined.ErrorOutline,
-                title = "Connection failed",
+                icon = CodexIcons.ErrorOutline,
+                title = "连接失败",
                 detail = state.connectionMessage,
                 loading = false,
                 action = onOpenConnections,
@@ -895,8 +932,8 @@ private fun WorkspaceContent(
                     modifier = Modifier.fillMaxSize().padding(padding),
                 )
                 state.models.isEmpty() -> ConnectionState(
-                    icon = Icons.Outlined.ErrorOutline,
-                    title = "No remote models",
+                    icon = CodexIcons.ErrorOutline,
+                    title = "没有可用的远端模型",
                     detail = "远端 app-server 没有返回可用模型。请检查远端 Codex 版本和模型提供方配置。",
                     loading = false,
                     modifier = Modifier.fillMaxSize().padding(padding),
@@ -956,9 +993,9 @@ private fun WorkspaceContent(
                 }
             }
             ConnectionStatus.DISCONNECTED -> ConnectionState(
-                icon = Icons.Outlined.Computer,
-                title = "Disconnected",
-                detail = state.activeConnection?.name.orEmpty(),
+                icon = CodexIcons.Computer,
+                title = "已断开连接",
+                detail = state.connectionMessage.ifBlank { state.activeConnection?.name.orEmpty() },
                 loading = false,
                 action = onOpenConnections,
                 modifier = Modifier.fillMaxSize().padding(padding),
@@ -1025,7 +1062,7 @@ private fun ThreadHeaderOverflow(
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { expanded = true }) {
-            Icon(Icons.Outlined.MoreVert, contentDescription = "Task actions")
+            Icon(CodexIcons.MoreVert, contentDescription = "任务操作")
         }
         ThreadActionsMenu(
             expanded = expanded,
@@ -1051,25 +1088,6 @@ private fun ThreadHeaderOverflow(
                 expanded = false
                 onArchive()
             },
-        )
-    }
-}
-
-@Composable
-private fun ConnectionIndicator(state: AppUiState) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        val color = when (state.connectionStatus) {
-            ConnectionStatus.CONNECTED -> MaterialTheme.colorScheme.secondary
-            ConnectionStatus.ERROR -> MaterialTheme.colorScheme.error
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        }
-        Box(Modifier.size(6.dp).clip(CircleShape).background(color))
-        Spacer(Modifier.width(6.dp))
-        Text(
-            state.activeConnection?.host.orEmpty(),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
         )
     }
 }
@@ -1105,7 +1123,7 @@ internal fun groupConsecutiveCommands(timeline: List<TimelineItem>): List<Timeli
                 buildString {
                     append(commandIndex + 1)
                     append(". ")
-                    append(command.title.ifBlank { "Command" })
+                    append(command.title.ifBlank { "命令" })
                     if (command.body.isNotBlank()) {
                         append('\n')
                         append(command.body.trimEnd())
@@ -1166,36 +1184,51 @@ private fun Conversation(
 
     if (state.timeline.isEmpty()) {
         val project = state.projects.firstOrNull { it.path == state.selectedProjectPath }
-        Box(modifier, contentAlignment = Alignment.Center) {
+        BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+            val compact = maxHeight < 240.dp
             Column(
-                modifier = Modifier.widthIn(max = 560.dp).padding(28.dp),
+                modifier = Modifier.widthIn(max = 560.dp).padding(
+                    horizontal = 28.dp,
+                    vertical = if (compact) 8.dp else 28.dp,
+                ),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (state.isBusy) {
-                    CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(
+                        Modifier.size(if (compact) 20.dp else 26.dp),
+                        strokeWidth = 2.dp,
+                    )
                 } else {
                     Icon(
-                        Icons.Outlined.Psychology,
+                        CodexIcons.Psychology,
                         contentDescription = null,
-                        modifier = Modifier.size(30.dp),
+                        modifier = Modifier.size(if (compact) 22.dp else 30.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
                 Text(
-                    if (state.isBusy) "正在加载最近消息" else project?.name ?: "No remote Codex history",
-                    style = MaterialTheme.typography.headlineSmall,
+                    if (state.isBusy) "正在加载最近消息" else project?.name ?: "没有远端 Codex 历史",
+                    style = if (compact) {
+                        MaterialTheme.typography.titleLarge
+                    } else {
+                        MaterialTheme.typography.headlineSmall
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(5.dp))
+                Spacer(Modifier.height(if (compact) 3.dp else 5.dp))
                 Text(
                     project?.path ?: state.connectionMessage,
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 if (state.hasOlderHistory && !state.isBusy) {
                     Spacer(Modifier.height(10.dp))
                     TextButton(onClick = onLoadOlderHistory) {
-                        Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = null)
+                        Icon(CodexIcons.KeyboardArrowUp, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
                         Text("加载更早消息")
                     }
@@ -1363,7 +1396,7 @@ private fun Conversation(
                             strokeWidth = 2.dp,
                         )
                         state.olderHistoryError != null && state.hasOlderHistory -> TextButton(onClick = requestOlderHistory) {
-                            Icon(Icons.Outlined.Refresh, contentDescription = null)
+                            Icon(CodexIcons.Refresh, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text("重试加载更早消息", maxLines = 1)
                         }
@@ -1373,7 +1406,7 @@ private fun Conversation(
                             color = MaterialTheme.colorScheme.error,
                         )
                         state.hasOlderHistory -> TextButton(onClick = requestOlderHistory) {
-                            Icon(Icons.Outlined.KeyboardArrowUp, contentDescription = null)
+                            Icon(CodexIcons.KeyboardArrowUp, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text("加载更早消息")
                         }
@@ -1397,7 +1430,7 @@ private fun Conversation(
                     ) {
                         CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(9.dp))
-                        Text("Working", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("处理中", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -1423,11 +1456,11 @@ private fun Conversation(
                 },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)
                     .testTag("conversation-bottom-button"),
-                shape = CircleShape,
+                shape = RoundedCornerShape(8.dp),
                 containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
-                Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = "回到最新消息")
+                Icon(CodexIcons.KeyboardArrowDown, contentDescription = "回到最新消息")
             }
         }
     }
@@ -1478,7 +1511,7 @@ private fun TimelineRow(item: TimelineItem, modifier: Modifier) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
-                                Icons.Outlined.Flag,
+                                CodexIcons.Flag,
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1499,8 +1532,8 @@ private fun TimelineRow(item: TimelineItem, modifier: Modifier) {
         }
         TimelineKind.REASONING -> ExpandableTool(
             modifier,
-            Icons.Outlined.SmartToy,
-            item.title.ifBlank { "Reasoning" },
+            CodexIcons.SmartToy,
+            item.title.ifBlank { "思考过程" },
             item.body,
             item.status,
             expansionKey = item.id,
@@ -1508,24 +1541,24 @@ private fun TimelineRow(item: TimelineItem, modifier: Modifier) {
         )
         TimelineKind.PLAN -> ExpandableTool(
             modifier,
-            Icons.AutoMirrored.Outlined.List,
-            item.title.ifBlank { "Plan" },
+            CodexIcons.List,
+            item.title.ifBlank { "计划" },
             item.body,
             item.status,
             expansionKey = item.id,
             autoCollapseOnComplete = true,
         )
         TimelineKind.COMMAND -> ExpandableTool(
-            modifier, Icons.Outlined.Terminal, item.title.ifBlank { "Command" }, item.body, item.status,
+            modifier, CodexIcons.Terminal, item.title.ifBlank { "命令" }, item.body, item.status,
             expansionKey = item.id, mono = true, autoCollapseOnComplete = true,
         )
         TimelineKind.FILE_CHANGE -> FileChangesTool(item, modifier)
         TimelineKind.TOOL -> ExpandableTool(
-            modifier, Icons.Outlined.Build, item.title.ifBlank { "Tool" }, item.body, item.status,
+            modifier, CodexIcons.Build, item.title.ifBlank { "工具" }, item.body, item.status,
             expansionKey = item.id, mono = true, autoCollapseOnComplete = true,
         )
         TimelineKind.REVIEW -> ExpandableTool(
-            modifier, Icons.Outlined.Code, item.title.ifBlank { "Code review" }, item.body, item.status,
+            modifier, CodexIcons.Code, item.title.ifBlank { "代码审查" }, item.body, item.status,
             expansionKey = item.id, autoCollapseOnComplete = true,
         )
         TimelineKind.COMPACTION -> Row(
@@ -1534,20 +1567,20 @@ private fun TimelineRow(item: TimelineItem, modifier: Modifier) {
         ) {
             HorizontalDivider(Modifier.weight(1f))
             Icon(
-                Icons.Outlined.Compress,
+                CodexIcons.Compress,
                 contentDescription = null,
                 modifier = Modifier.padding(horizontal = 8.dp).size(16.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                item.title.ifBlank { "Context compacted" },
+                item.title.ifBlank { "上下文已压缩" },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             HorizontalDivider(Modifier.weight(1f).padding(start = 8.dp))
         }
         TimelineKind.ERROR -> ExpandableTool(
-            modifier, Icons.Outlined.ErrorOutline, item.title.ifBlank { "Error" }, item.body, item.status,
+            modifier, CodexIcons.ErrorOutline, item.title.ifBlank { "错误" }, item.body, item.status,
             expansionKey = item.id,
         )
     }
@@ -1564,7 +1597,7 @@ private fun FileChangesTool(item: TimelineItem, modifier: Modifier) {
         total.first + changeCounts.first to total.second + changeCounts.second
     }
     val title = when (item.fileChanges.size) {
-        0 -> item.title.ifBlank { "File changes" }
+        0 -> item.title.ifBlank { "文件修改" }
         1 -> item.fileChanges.first().path
         else -> "已编辑 ${item.fileChanges.size} 个文件"
     }
@@ -1579,7 +1612,7 @@ private fun FileChangesTool(item: TimelineItem, modifier: Modifier) {
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Outlined.Code, contentDescription = null, modifier = Modifier.size(17.dp))
+                Icon(CodexIcons.Code, contentDescription = null, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(9.dp))
                 Text(
                     title,
@@ -1597,7 +1630,7 @@ private fun FileChangesTool(item: TimelineItem, modifier: Modifier) {
                     Spacer(Modifier.width(7.dp))
                 }
                 Icon(
-                    if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
+                    if (expanded) CodexIcons.ExpandMore else CodexIcons.ChevronRight,
                     contentDescription = if (expanded) "收起文件修改" else "展开文件修改",
                     modifier = Modifier.size(18.dp),
                 )
@@ -1606,7 +1639,7 @@ private fun FileChangesTool(item: TimelineItem, modifier: Modifier) {
                 HorizontalDivider()
                 if (item.fileChanges.isEmpty()) {
                     Text(
-                        item.body.ifBlank { "No file details" },
+                        item.body.ifBlank { "没有文件详情" },
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
                         style = MonoText,
                     )
@@ -1629,7 +1662,7 @@ private fun FileChangeBlock(change: FileChangeSummary) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Outlined.Description, contentDescription = null, modifier = Modifier.size(16.dp))
+            Icon(CodexIcons.Description, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
             Text(
                 change.path,
@@ -1696,10 +1729,10 @@ internal fun diffLineCounts(diff: String): Pair<Int, Int> {
 }
 
 private fun String.displayFileChangeKind(): String = when (lowercase()) {
-    "add", "added", "create", "created" -> "Added"
-    "delete", "deleted", "remove", "removed" -> "Deleted"
-    "rename", "renamed", "move", "moved" -> "Renamed"
-    else -> "Modified"
+    "add", "added", "create", "created" -> "新增"
+    "delete", "deleted", "remove", "removed" -> "删除"
+    "rename", "renamed", "move", "moved" -> "重命名"
+    else -> "修改"
 }
 
 @Composable
@@ -1735,7 +1768,7 @@ private fun ExpandableTool(
                 if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(6.dp))
                 Icon(
-                    if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ChevronRight,
+                    if (expanded) CodexIcons.ExpandMore else CodexIcons.ChevronRight,
                     contentDescription = if (expanded) "收起" else "展开",
                     modifier = Modifier.size(18.dp),
                 )
@@ -1783,6 +1816,7 @@ private fun MarkdownBody(text: String, modifier: Modifier = Modifier) {
                 movementMethod = LinkMovementMethod.getInstance()
                 includeFontPadding = false
                 setLineSpacing(0f, 1.12f)
+                typeface = ResourcesCompat.getFont(viewContext, R.font.misans_regular)
             }
         },
         update = { textView ->
@@ -1922,13 +1956,10 @@ private fun Composer(
                 attachments = (attachments + attachment).takeLast(MAX_COMPOSER_IMAGES)
                 attachmentError = null
             }.onFailure { error ->
-                attachmentError = error.message ?: "Unable to attach image"
+                attachmentError = error.message ?: "无法添加图片"
             }
         }
     }
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val density = LocalDensity.current
-    val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
     val composerMenuProperties = remember { PopupProperties(focusable = false) }
     val selectedModel = state.models.firstOrNull { it.id == state.selectedModel }
     val selectedServiceTier = selectedModel?.serviceTiers?.firstOrNull { it.id == state.selectedServiceTier }
@@ -1945,8 +1976,11 @@ private fun Composer(
             selectedModel?.serviceTiers.orEmpty().map { tier ->
                 SlashCommand(
                     name = tier.id.lowercase(),
-                    description = tier.description.ifBlank { "Use ${tier.name} service tier" },
-                    icon = Icons.Outlined.SmartToy,
+                    description = tier.description
+                        .takeIf(String::isNotBlank)
+                        ?.let(::localizeCodexDescription)
+                        ?: "使用 ${tier.name.localizedCodexLabel()} 服务档位",
+                    icon = CodexIcons.SmartToy,
                     action = SlashCommandAction.SERVICE_TIER,
                     value = tier.id,
                 )
@@ -2149,13 +2183,14 @@ private fun Composer(
                 )
             }
             Surface(
-                modifier = Modifier.fillMaxWidth().widthIn(max = 860.dp).padding(horizontal = 12.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(7.dp),
+                modifier = Modifier.fillMaxWidth().widthIn(max = 860.dp)
+                    .testTag("composer-surface")
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                shadowElevation = 2.dp,
             ) {
-                Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Column(Modifier.padding(horizontal = 11.dp, vertical = 9.dp)) {
                     if (attachments.isNotEmpty()) {
                         Row(
                             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
@@ -2171,7 +2206,7 @@ private fun Composer(
                                         modifier = Modifier.height(30.dp).padding(start = 8.dp, end = 2.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        Icon(Icons.Outlined.Image, contentDescription = null, modifier = Modifier.size(15.dp))
+                                        Icon(CodexIcons.Image, contentDescription = null, modifier = Modifier.size(15.dp))
                                         Spacer(Modifier.width(5.dp))
                                         Text(
                                             attachment.displayName,
@@ -2184,7 +2219,7 @@ private fun Composer(
                                             onClick = { attachments = attachments.filterNot { it.id == attachment.id } },
                                             modifier = Modifier.size(28.dp),
                                         ) {
-                                            Icon(Icons.Outlined.Close, contentDescription = "Remove image", modifier = Modifier.size(15.dp))
+                                            Icon(CodexIcons.Close, contentDescription = "移除图片", modifier = Modifier.size(15.dp))
                                         }
                                     }
                                 }
@@ -2225,7 +2260,7 @@ private fun Composer(
                                         if (goalModeActive) {
                                             "描述你的目标，最好包含可衡量的结果"
                                         } else {
-                                            "Ask Codex"
+                                            "向 Codex 提问"
                                         },
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2235,12 +2270,22 @@ private fun Composer(
                             }
                         },
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth().height(34.dp).padding(top = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    if (goalModeActive) {
+                        GoalModeIndicator(
+                            onClear = { goalModeActive = false },
+                            modifier = Modifier.fillMaxWidth().testTag("composer-goal-marker"),
+                        )
+                    }
+                    val canSend = if (goalModeActive || inlineGoalObjective != null) {
+                        text.text.isNotBlank() && !state.isTurnRunning && !state.isGoalLoading
+                    } else {
+                        (text.text.isNotBlank() || attachments.isNotEmpty()) &&
+                            (!state.isTurnRunning || state.activeTurnId != null)
+                    }
+                    val sendDescription = if (state.isTurnRunning) "追加到当前任务" else "发送"
+                    val utilityControls: @Composable () -> Unit = {
                         Row(
-                            modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             ComposerAddMenu(
@@ -2296,12 +2341,11 @@ private fun Composer(
                                 },
                             )
                             Box {
-                                CompactComposerMenuButton(
+                                CompactComposerIconButton(
                                     modifier = Modifier.testTag("composer-permissions"),
-                                    label = permissionModeLabel(state),
-                                    maxLabelWidth = 88.dp,
-                                    leadingIcon = Icons.Outlined.Tune,
-                                    showChevron = false,
+                                    icon = CodexIcons.Tune,
+                                    contentDescription = "权限：${permissionModeLabel(state)}",
+                                    selected = policyMenu,
                                     onClick = { policyMenu = true },
                                 )
                                 PermissionDropdown(
@@ -2319,58 +2363,22 @@ private fun Composer(
                                     },
                                 )
                             }
-                            if (goalModeActive) {
-                                Spacer(Modifier.width(5.dp))
-                                Box(
-                                    Modifier.width(1.dp).height(18.dp)
-                                        .background(MaterialTheme.colorScheme.outlineVariant),
-                                )
-                                Spacer(Modifier.width(3.dp))
-                                GoalModeIndicator(
-                                    onClear = { goalModeActive = false },
-                                    modifier = Modifier.testTag("composer-goal-marker"),
-                                )
-                            }
                         }
-                        if (isKeyboardVisible) {
-                            IconButton(
-                                onClick = { keyboardController?.hide() },
-                                modifier = Modifier.size(34.dp),
-                            ) {
-                                Icon(
-                                    Icons.Outlined.KeyboardHide,
-                                    contentDescription = "Hide keyboard",
-                                    modifier = Modifier.size(19.dp),
-                                )
-                            }
-                            Spacer(Modifier.width(4.dp))
-                        }
-                        if (state.isTurnRunning) {
-                            IconButton(
-                                onClick = onStop,
-                                enabled = state.activeTurnId != null,
-                                modifier = Modifier.size(34.dp),
-                            ) {
-                                Icon(Icons.Outlined.Stop, contentDescription = "停止")
-                            }
-                            Spacer(Modifier.width(4.dp))
-                        }
-                        ContextUsageRing(
-                            usage = state.threadTokenUsage,
-                            onClick = onShowStatus,
-                            modifier = Modifier.testTag("composer-context"),
-                        )
-                        Spacer(Modifier.width(2.dp))
-                        Box {
-                            CompactComposerMenuButton(
+                    }
+                    val modelControl: @Composable (Modifier) -> Unit = { modelModifier ->
+                        Box(modelModifier) {
+                            CompactComposerIconButton(
                                 modifier = Modifier.testTag("composer-model"),
-                                label = modelSettingsSummary(
-                                    modelId = selectedModel?.id,
-                                    effort = state.selectedReasoningEffort,
-                                    serviceTier = selectedServiceTier?.name,
-                                ),
-                                maxLabelWidth = 144.dp,
+                                icon = CodexIcons.Hub,
+                                contentDescription = "模型：${
+                                    modelSettingsSummary(
+                                        modelId = selectedModel?.id,
+                                        effort = state.selectedReasoningEffort,
+                                        serviceTier = selectedServiceTier?.name,
+                                    )
+                                }",
                                 enabled = state.models.isNotEmpty(),
+                                selected = modelSettingsMenu,
                                 onClick = {
                                     modelSettingsPage = ModelSettingsPage.ROOT
                                     modelSettingsMenu = true
@@ -2391,55 +2399,118 @@ private fun Composer(
                                 onSetServiceTier = onSetServiceTier,
                             )
                         }
-                        Spacer(Modifier.width(3.dp))
-                        Surface(
-                            modifier = Modifier.size(34.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary,
-                        ) {
+                    }
+                    val secondaryControls: @Composable () -> Unit = {
+                        if (state.isTurnRunning) {
                             IconButton(
-                                onClick = {
-                                    if (text.text.isNotBlank() || attachments.isNotEmpty()) {
-                                        val exactCommand = text.text.trim().takeIf { attachments.isEmpty() }
-                                            ?.takeIf { it.startsWith('/') && it.drop(1).none(Char::isWhitespace) }
-                                            ?.drop(1)
-                                            ?.let { name -> allSlashCommands.firstOrNull { it.name.equals(name, true) } }
-                                        if (exactCommand != null) {
-                                            executeSlashCommand(exactCommand)
-                                            text = TextFieldValue()
-                                        } else {
-                                            val submittedText = inlineGoalObjective ?: text.text
-                                            val submittedMentions = selectedMentions
-                                            val submittedAttachments = attachments
-                                            val submitAsGoal = goalModeActive || inlineGoalObjective != null
-                                            text = TextFieldValue()
-                                            selectedMentions = emptyList()
-                                            attachments = emptyList()
-                                            attachmentError = null
-                                            mentionKindFilter = null
-                                            goalModeActive = false
-                                            onSend(
-                                                submittedText,
-                                                submittedMentions,
-                                                submittedAttachments,
-                                                submitAsGoal,
-                                            )
-                                        }
-                                    }
-                                },
-                                enabled = if (goalModeActive || inlineGoalObjective != null) {
-                                    text.text.isNotBlank() && !state.isTurnRunning && !state.isGoalLoading
-                                } else {
-                                    (text.text.isNotBlank() || attachments.isNotEmpty()) &&
-                                        (!state.isTurnRunning || state.activeTurnId != null)
-                                },
-                                modifier = Modifier.testTag("composer-send"),
+                                onClick = onStop,
+                                enabled = state.activeTurnId != null,
+                                modifier = Modifier.size(48.dp),
                             ) {
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.Send,
-                                    contentDescription = if (state.isTurnRunning) "追加到当前任务" else "发送",
-                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                Icon(CodexIcons.Stop, contentDescription = "停止")
+                            }
+                        }
+                    }
+                    val contextControl: @Composable () -> Unit = {
+                        ContextUsageRing(
+                            usage = state.threadTokenUsage,
+                            ccSwitchStatus = state.ccSwitchStatus,
+                            onClick = onShowStatus,
+                            modifier = Modifier.testTag("composer-context"),
+                        )
+                    }
+                    val sendControl: @Composable () -> Unit = {
+                        Box(
+                            modifier = Modifier.size(48.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(
+                                    enabled = canSend,
+                                    role = Role.Button,
+                                    onClick = {
+                                        if (text.text.isNotBlank() || attachments.isNotEmpty()) {
+                                            val exactCommand = text.text.trim().takeIf { attachments.isEmpty() }
+                                                ?.takeIf { it.startsWith('/') && it.drop(1).none(Char::isWhitespace) }
+                                                ?.drop(1)
+                                                ?.let { name -> allSlashCommands.firstOrNull { it.name.equals(name, true) } }
+                                            if (exactCommand != null) {
+                                                executeSlashCommand(exactCommand)
+                                                text = TextFieldValue()
+                                            } else {
+                                                val submittedText = inlineGoalObjective ?: text.text
+                                                val submittedMentions = selectedMentions
+                                                val submittedAttachments = attachments
+                                                val submitAsGoal = goalModeActive || inlineGoalObjective != null
+                                                text = TextFieldValue()
+                                                selectedMentions = emptyList()
+                                                attachments = emptyList()
+                                                attachmentError = null
+                                                mentionKindFilter = null
+                                                goalModeActive = false
+                                                onSend(
+                                                    submittedText,
+                                                    submittedMentions,
+                                                    submittedAttachments,
+                                                    submitAsGoal,
+                                                )
+                                            }
+                                        }
+                                    },
                                 )
+                                .semantics { contentDescription = sendDescription }
+                                .testTag("composer-send"),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(44.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                            ) {}
+                            Icon(
+                                CodexIcons.Send,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        }
+                    }
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                            .testTag("composer-controls"),
+                    ) {
+                        val useStackedControls = state.isTurnRunning && maxWidth < 300.dp
+                        if (useStackedControls) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    utilityControls()
+                                    Spacer(Modifier.weight(1f))
+                                    modelControl(Modifier)
+                                    secondaryControls()
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Spacer(Modifier.weight(1f))
+                                    contextControl()
+                                    Spacer(Modifier.width(2.dp))
+                                    sendControl()
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                utilityControls()
+                                Spacer(Modifier.weight(1f))
+                                secondaryControls()
+                                contextControl()
+                                Spacer(Modifier.width(2.dp))
+                                modelControl(Modifier)
+                                Spacer(Modifier.width(2.dp))
+                                sendControl()
                             }
                         }
                     }
@@ -2484,43 +2555,38 @@ private fun ComposerAddMenu(
     onMention: (ComposerMentionOption) -> Unit,
 ) {
     Box {
-        IconButton(onClick = onOpen, modifier = modifier.size(32.dp)) {
-            Icon(Icons.Outlined.Add, contentDescription = "添加", modifier = Modifier.size(20.dp))
+        IconButton(onClick = onOpen, modifier = modifier.size(48.dp)) {
+            Icon(CodexIcons.Add, contentDescription = "添加", modifier = Modifier.size(20.dp))
         }
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = onDismiss,
-            modifier = Modifier.width(330.dp).heightIn(max = 440.dp),
+            modifier = Modifier.width(352.dp).heightIn(max = 460.dp),
             properties = properties,
         ) {
-            Text(
-                "添加",
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            CodexMenuHeading("添加到消息")
             AddMenuItem(
-                icon = Icons.Outlined.FolderOpen,
+                icon = CodexIcons.FolderOpen,
                 title = "文件和文件夹",
                 description = "选择远端项目中的路径",
                 enabled = canBrowseRemoteFiles,
                 onClick = onBrowseRemoteFiles,
             )
             AddMenuItem(
-                icon = Icons.Outlined.Image,
+                icon = CodexIcons.Image,
                 title = "图片",
                 description = "从 Android 设备添加图片",
                 enabled = canAttachImage,
                 onClick = onAttachImage,
             )
             AddMenuItem(
-                icon = Icons.Outlined.Flag,
+                icon = CodexIcons.Flag,
                 title = "目标",
                 description = "设置要持续追求的目标",
                 onClick = onOpenGoal,
             )
             AddMenuItem(
-                icon = Icons.AutoMirrored.Outlined.List,
+                icon = CodexIcons.List,
                 title = "计划模式",
                 description = "开启远端计划模式",
                 enabled = planModeAvailable,
@@ -2528,15 +2594,10 @@ private fun ComposerAddMenu(
             )
             if (skills.isNotEmpty() || plugins.isNotEmpty()) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                Text(
-                    "技能和插件",
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                CodexMenuHeading("技能与插件")
                 skills.forEach { option ->
                     AddMenuItem(
-                        icon = Icons.Outlined.Psychology,
+                        icon = CodexIcons.Psychology,
                         title = option.title,
                         description = option.description,
                         onClick = { onMention(option) },
@@ -2544,7 +2605,7 @@ private fun ComposerAddMenu(
                 }
                 plugins.forEach { option ->
                     AddMenuItem(
-                        icon = Icons.Outlined.Extension,
+                        icon = CodexIcons.Extension,
                         title = option.title,
                         description = option.description,
                         onClick = { onMention(option) },
@@ -2662,13 +2723,13 @@ private fun RemotePathRow(name: String, directory: Boolean, onClick: () -> Unit)
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            if (directory) Icons.Outlined.FolderOpen else Icons.Outlined.Description,
+            if (directory) CodexIcons.FolderOpen else CodexIcons.Description,
             contentDescription = null,
             modifier = Modifier.size(20.dp),
         )
         Spacer(Modifier.width(10.dp))
         Text(name, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (directory) Icon(Icons.Outlined.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
+        if (directory) Icon(CodexIcons.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -2718,7 +2779,7 @@ private fun GoalBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Icons.Outlined.Flag,
+            CodexIcons.Flag,
             contentDescription = null,
             modifier = Modifier.size(18.dp),
             tint = MaterialTheme.colorScheme.primary,
@@ -2732,7 +2793,7 @@ private fun GoalBar(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "Goal · ${goal.status.displayGoalStatus()}",
+                "目标 · ${goal.status.displayGoalStatus()}",
                 style = MaterialTheme.typography.labelSmall,
                 color = goal.status.goalStatusColor(),
             )
@@ -2742,7 +2803,7 @@ private fun GoalBar(
             Spacer(Modifier.width(7.dp))
         }
         IconButton(onClick = onEdit, enabled = !loading, modifier = Modifier.size(34.dp)) {
-            Icon(Icons.Outlined.Edit, contentDescription = "Edit goal", modifier = Modifier.size(18.dp))
+            Icon(CodexIcons.Edit, contentDescription = "编辑目标", modifier = Modifier.size(18.dp))
         }
         when (goal.status) {
             ThreadGoalStatus.ACTIVE -> IconButton(
@@ -2750,7 +2811,7 @@ private fun GoalBar(
                 enabled = !loading,
                 modifier = Modifier.size(34.dp),
             ) {
-                Icon(Icons.Outlined.Pause, contentDescription = "Pause goal", modifier = Modifier.size(18.dp))
+                Icon(CodexIcons.Pause, contentDescription = "暂停目标", modifier = Modifier.size(18.dp))
             }
             ThreadGoalStatus.PAUSED,
             ThreadGoalStatus.BLOCKED,
@@ -2760,14 +2821,14 @@ private fun GoalBar(
                 enabled = !loading,
                 modifier = Modifier.size(34.dp),
             ) {
-                Icon(Icons.Outlined.PlayArrow, contentDescription = "Resume goal", modifier = Modifier.size(19.dp))
+                Icon(CodexIcons.PlayArrow, contentDescription = "恢复目标", modifier = Modifier.size(19.dp))
             }
             ThreadGoalStatus.BUDGET_LIMITED,
             ThreadGoalStatus.COMPLETE,
             -> Unit
         }
         IconButton(onClick = onClear, enabled = !loading, modifier = Modifier.size(34.dp)) {
-            Icon(Icons.Outlined.Close, contentDescription = "Clear goal", modifier = Modifier.size(18.dp))
+            Icon(CodexIcons.Close, contentDescription = "清除目标", modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -2783,14 +2844,14 @@ private fun GoalEditorDialog(
     var objective by remember(initialObjective) { mutableStateOf(initialObjective) }
     AlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
-        title = { Text(if (initialObjective.isBlank()) "Add goal" else "Edit goal") },
+                title = { Text(if (initialObjective.isBlank()) "添加目标" else "编辑目标") },
         text = {
             Column {
                 OutlinedTextField(
                     value = objective,
                     onValueChange = { objective = it },
                     modifier = Modifier.fillMaxWidth().testTag("goal-editor-input"),
-                    label = { Text("Goal") },
+                    label = { Text("目标") },
                     minLines = 2,
                     maxLines = 5,
                     enabled = !isSaving,
@@ -2806,11 +2867,11 @@ private fun GoalEditorDialog(
                 onClick = { onSave(objective) },
                 enabled = objective.isNotBlank() && !isSaving,
             ) {
-                Text(if (isSaving) "Saving…" else "Save")
+                Text(if (isSaving) "正在保存…" else "保存")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Cancel") }
+            TextButton(onClick = onDismiss, enabled = !isSaving) { Text("取消") }
         },
     )
 }
@@ -2824,21 +2885,21 @@ private fun ReviewDialog(
     var targetValue by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Code review") },
+        title = { Text("代码审查") },
         text = {
             Column {
                 ReviewTargetOption(
-                    label = "Uncommitted changes",
+                    label = "未提交的变更",
                     selected = target == ReviewTargetKind.UNCOMMITTED_CHANGES,
                     onSelect = { target = ReviewTargetKind.UNCOMMITTED_CHANGES },
                 )
                 ReviewTargetOption(
-                    label = "Compare with base branch",
+                    label = "与基准分支比较",
                     selected = target == ReviewTargetKind.BASE_BRANCH,
                     onSelect = { target = ReviewTargetKind.BASE_BRANCH },
                 )
                 ReviewTargetOption(
-                    label = "Custom review",
+                    label = "自定义审查",
                     selected = target == ReviewTargetKind.CUSTOM,
                     onSelect = { target = ReviewTargetKind.CUSTOM },
                 )
@@ -2849,7 +2910,7 @@ private fun ReviewDialog(
                         onValueChange = { targetValue = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = {
-                            Text(if (target == ReviewTargetKind.BASE_BRANCH) "Base branch" else "Instructions")
+                            Text(if (target == ReviewTargetKind.BASE_BRANCH) "基准分支" else "审查说明")
                         },
                         minLines = if (target == ReviewTargetKind.CUSTOM) 2 else 1,
                         maxLines = 4,
@@ -2861,9 +2922,9 @@ private fun ReviewDialog(
             TextButton(
                 onClick = { onStart(target, targetValue) },
                 enabled = target == ReviewTargetKind.UNCOMMITTED_CHANGES || targetValue.isNotBlank(),
-            ) { Text("Start review") }
+            ) { Text("开始审查") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 
@@ -2888,17 +2949,17 @@ private fun FeedbackDialog(
     onSubmit: (String, String) -> Unit,
 ) {
     val classifications = listOf(
-        "bug" to "Bug",
-        "bad" to "Result was wrong",
-        "good" to "Result was helpful",
-        "other" to "Other",
+        "bug" to "程序问题",
+        "bad" to "结果有误",
+        "good" to "结果有帮助",
+        "other" to "其他",
     )
     var classification by remember { mutableStateOf("bug") }
     var reason by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Outlined.ErrorOutline, contentDescription = null) },
-        title = { Text("Send feedback") },
+        icon = { Icon(CodexIcons.ErrorOutline, contentDescription = null) },
+        title = { Text("发送反馈") },
         text = {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 classifications.forEach { (value, label) ->
@@ -2922,7 +2983,7 @@ private fun FeedbackDialog(
                     value = reason,
                     onValueChange = { reason = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Details") },
+                    label = { Text("详情") },
                     minLines = 3,
                     maxLines = 6,
                 )
@@ -2933,11 +2994,11 @@ private fun FeedbackDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onSubmit(classification, reason) }, enabled = !isSubmitting) {
-                Text("Send")
+            CodexButton(onClick = { onSubmit(classification, reason) }, enabled = !isSubmitting) {
+                Text("发送")
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 
@@ -2950,29 +3011,29 @@ private fun McpStatusDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("MCP servers") },
+        title = { Text("MCP 服务器") },
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 when {
                     state.isMcpStatusLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(10.dp))
-                        Text("Loading remote MCP status…")
+                        Text("正在加载远端 MCP 状态…")
                     }
                     !state.mcpStatusError.isNullOrBlank() -> Text(
                         state.mcpStatusError,
                         color = MaterialTheme.colorScheme.error,
                     )
-                    state.mcpServers.isEmpty() -> Text("No MCP servers configured")
+                    state.mcpServers.isEmpty() -> Text("尚未配置 MCP 服务器")
                     else -> state.mcpServers.forEachIndexed { index, server ->
                         if (index > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp))
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.Hub, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(CodexIcons.Hub, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(server.name, style = MaterialTheme.typography.labelLarge)
                                 Text(
-                                    "${server.toolCount} tools · ${server.resourceCount} resources",
+                                    "${server.toolCount} 个工具 · ${server.resourceCount} 个资源",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -2982,9 +3043,9 @@ private fun McpStatusDialog(
                                     onClick = { onLogin(server.name) },
                                     enabled = !state.isMcpLoginStarting,
                                 ) {
-                                    Icon(Icons.Outlined.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(CodexIcons.Key, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(5.dp))
-                                    Text("Sign in")
+                                    Text("登录")
                                 }
                             } else {
                                 Text(
@@ -2999,13 +3060,13 @@ private fun McpStatusDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text("关闭") }
         },
         dismissButton = {
             TextButton(onClick = onRefresh, enabled = !state.isMcpStatusLoading && !state.isMcpLoginStarting) {
-                Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(17.dp))
+                Icon(CodexIcons.Refresh, contentDescription = null, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(5.dp))
-                Text("Reload")
+                Text("重新加载")
             }
         },
     )
@@ -3028,19 +3089,19 @@ private fun ArchivedTasksDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Archived tasks") },
+        title = { Text("已归档任务") },
         text = {
             Column(Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search archived tasks") },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                    placeholder = { Text("搜索已归档任务") },
+                    leadingIcon = { Icon(CodexIcons.Search, contentDescription = null) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Outlined.Close, contentDescription = "Clear search")
+                                Icon(CodexIcons.Close, contentDescription = "清除搜索")
                             }
                         }
                     },
@@ -3054,7 +3115,7 @@ private fun ArchivedTasksDialog(
                     ) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(10.dp))
-                        Text("Loading archived tasks…")
+                        Text("正在加载已归档任务…")
                     }
                     !state.archivedThreadsError.isNullOrBlank() -> Text(
                         state.archivedThreadsError,
@@ -3062,7 +3123,7 @@ private fun ArchivedTasksDialog(
                         color = MaterialTheme.colorScheme.error,
                     )
                     filteredThreads.isEmpty() -> Text(
-                        if (searchQuery.isBlank()) "No archived tasks" else "No matching archived tasks",
+                        if (searchQuery.isBlank()) "没有已归档任务" else "没有匹配的已归档任务",
                         modifier = Modifier.padding(vertical = 16.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -3074,7 +3135,7 @@ private fun ArchivedTasksDialog(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(Icons.Outlined.Description, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(CodexIcons.Description, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(9.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(
@@ -3092,12 +3153,12 @@ private fun ArchivedTasksDialog(
                                     )
                                 }
                                 IconButton(onClick = { onUnarchive(thread) }) {
-                                    Icon(Icons.Outlined.Unarchive, contentDescription = "Restore task")
+                                    Icon(CodexIcons.Unarchive, contentDescription = "恢复任务")
                                 }
                                 IconButton(onClick = { onDelete(thread) }) {
                                     Icon(
-                                        Icons.Outlined.DeleteOutline,
-                                        contentDescription = "Delete task permanently",
+                                        CodexIcons.DeleteOutline,
+                                        contentDescription = "永久删除任务",
                                         tint = MaterialTheme.colorScheme.error,
                                     )
                                 }
@@ -3108,12 +3169,12 @@ private fun ArchivedTasksDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
         dismissButton = {
             TextButton(onClick = onRefresh, enabled = !state.isArchivedThreadsLoading) {
-                Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(17.dp))
+                Icon(CodexIcons.Refresh, contentDescription = null, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(5.dp))
-                Text("Refresh")
+                Text("刷新")
             }
         },
     )
@@ -3127,17 +3188,17 @@ private fun DeleteArchivedThreadDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null) },
-        title = { Text("Delete task permanently?") },
-        text = { Text("${thread.title}\n\nThis removes the remote Codex history and cannot be undone.") },
+        icon = { Icon(CodexIcons.DeleteOutline, contentDescription = null) },
+        title = { Text("永久删除任务？") },
+        text = { Text("${thread.title}\n\n这会删除远端 Codex 历史，且无法撤销。") },
         confirmButton = {
-            Button(onClick = onDelete) {
-                Icon(Icons.Outlined.DeleteOutline, contentDescription = null, modifier = Modifier.size(17.dp))
+            CodexButton(onClick = onDelete) {
+                Icon(CodexIcons.DeleteOutline, contentDescription = null, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Delete")
+                Text("删除")
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 
@@ -3151,39 +3212,79 @@ private fun RemoteStatusDialog(state: AppUiState, onDismiss: () -> Unit) {
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Remote status") },
+        title = { Text("远端状态") },
         text = {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-                StatusLine("Task ID", state.selectedThreadId ?: "New task", monospace = true)
-                StatusLine("Codex", state.remoteServer?.codexVersion?.ifBlank { "Unknown" } ?: "Unknown")
-                StatusLine("Model", state.selectedModel ?: "Unknown")
+                StatusLine("任务 ID", state.selectedThreadId ?: "新任务", monospace = true)
+                StatusLine("Codex", state.remoteServer?.codexVersion?.ifBlank { "未知" } ?: "未知")
+                StatusLine("模型", state.selectedModel ?: "未知")
                 StatusLine(
-                    "Context",
-                    contextPercent?.let { "${it.toInt().coerceIn(0, 100)}% · ${usage?.totalTokens ?: 0} tokens" }
-                        ?: "Waiting for usage data",
+                    "上下文",
+                    contextPercent?.let { "${it.toInt().coerceIn(0, 100)}% · ${usage?.totalTokens ?: 0} 个令牌" }
+                        ?: "等待用量数据",
                 )
                 if (state.isStatusLoading) {
                     Spacer(Modifier.height(12.dp))
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 } else {
-                    state.rateLimits?.let { limits ->
-                        limits.planType?.let { StatusLine("Plan", it) }
-                        limits.primary?.let { StatusLine("Primary limit", it.displayRateLimit()) }
-                        limits.secondary?.let { StatusLine("Secondary limit", it.displayRateLimit()) }
-                        when {
-                            limits.creditsUnlimited -> StatusLine("Credits", "Unlimited")
-                            !limits.creditsBalance.isNullOrBlank() -> StatusLine("Credits", limits.creditsBalance)
+                    val ccSwitch = state.ccSwitchStatus
+                    if (ccSwitch != null) {
+                        StatusLine("数据源", "CC Switch")
+                        StatusLine("供应商", ccSwitch.providerName)
+                        if (ccSwitch.quotas.isEmpty()) {
+                            StatusLine(
+                                "额度",
+                                if (ccSwitch.available == true) "暂无额度数值" else "不可用",
+                            )
+                        } else {
+                            ccSwitch.quotas.forEachIndexed { index, quota ->
+                                StatusLine(
+                                    quota.planName?.takeIf(String::isNotBlank)
+                                        ?: if (ccSwitch.quotas.size == 1) "额度" else "额度 ${index + 1}",
+                                    quota.displayQuota(),
+                                )
+                            }
                         }
-                    }
-                    state.statusError?.let {
-                        Spacer(Modifier.height(8.dp))
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        ccSwitch.queriedAt?.let { queriedAt ->
+                            StatusLine("查询时间", DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(queriedAt)))
+                        }
+                        ccSwitch.error?.let {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                localizeCodexMessage(it),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    } else {
+                        state.rateLimits?.let { limits ->
+                            limits.planType?.let { StatusLine("套餐", it.displayPlanType()) }
+                            limits.primary?.let { StatusLine("主要额度", it.displayRateLimit()) }
+                            limits.secondary?.let { StatusLine("次要额度", it.displayRateLimit()) }
+                            when {
+                                limits.creditsUnlimited -> StatusLine("额度", "不限")
+                                !limits.creditsBalance.isNullOrBlank() -> StatusLine("额度", limits.creditsBalance)
+                            }
+                        }
+                        state.statusError?.let {
+                            Spacer(Modifier.height(8.dp))
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
     )
+}
+
+private fun CcSwitchQuotaSnapshot.displayQuota(): String {
+    val value = when {
+        remaining.isNullOrBlank() -> "暂无额度数值"
+        unit.isNullOrBlank() -> "剩余 $remaining"
+        else -> "剩余 $remaining $unit"
+    }
+    return if (isValid == false) "$value · 不可用" else value
 }
 
 @Composable
@@ -3206,19 +3307,31 @@ private fun StatusLine(label: String, value: String, monospace: Boolean = false)
 }
 
 private fun String.displayMcpAuthStatus(): String = when (this) {
-    "notLoggedIn" -> "Not authenticated"
-    "bearerToken" -> "API key"
+    "notLoggedIn" -> "未登录"
+    "bearerToken" -> "API 密钥"
     "oAuth" -> "OAuth"
-    "unsupported" -> "No auth"
-    else -> ifBlank { "Unknown" }
+    "unsupported" -> "无需认证"
+    else -> ifBlank { "未知" }.takeUnless { value -> value.any { it in 'A'..'Z' || it in 'a'..'z' } }
+        ?: "其他认证方式"
+}
+
+private fun String.displayPlanType(): String = when (lowercase()) {
+    "free" -> "免费版"
+    "plus" -> "Plus 版"
+    "pro" -> "Pro 版"
+    "team" -> "团队版"
+    "business" -> "商业版"
+    "enterprise" -> "企业版"
+    "edu", "education" -> "教育版"
+    else -> if (any { it in 'A'..'Z' || it in 'a'..'z' }) "套餐" else this
 }
 
 private fun com.codex.remote.domain.RateLimitWindowSnapshot.displayRateLimit(): String {
     val reset = resetsAt?.let { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it * 1000)) }
     return buildString {
-        append("${usedPercent.toInt().coerceIn(0, 100)}% used")
-        if (windowDurationMinutes != null) append(" · ${windowDurationMinutes} min")
-        if (reset != null) append(" · resets $reset")
+        append("已使用 ${usedPercent.toInt().coerceIn(0, 100)}%")
+        if (windowDurationMinutes != null) append(" · ${windowDurationMinutes} 分钟")
+        if (reset != null) append(" · 重置时间 $reset")
     }
 }
 
@@ -3231,12 +3344,12 @@ private fun ThreadGoalStatus.goalStatusColor(): Color = when (this) {
 }
 
 private fun ThreadGoalStatus.displayGoalStatus(): String = when (this) {
-    ThreadGoalStatus.ACTIVE -> "Active"
-    ThreadGoalStatus.PAUSED -> "Paused"
-    ThreadGoalStatus.BLOCKED -> "Blocked"
-    ThreadGoalStatus.USAGE_LIMITED -> "Usage limited"
-    ThreadGoalStatus.BUDGET_LIMITED -> "Budget limited"
-    ThreadGoalStatus.COMPLETE -> "Complete"
+    ThreadGoalStatus.ACTIVE -> "进行中"
+    ThreadGoalStatus.PAUSED -> "已暂停"
+    ThreadGoalStatus.BLOCKED -> "已阻塞"
+    ThreadGoalStatus.USAGE_LIMITED -> "用量受限"
+    ThreadGoalStatus.BUDGET_LIMITED -> "预算受限"
+    ThreadGoalStatus.COMPLETE -> "已完成"
 }
 
 private val builtInPermissionProfiles = setOf(":workspace", ":danger-full-access", ":read-only")
@@ -3262,7 +3375,7 @@ private fun permissionModeLabel(state: AppUiState): String = when (
     PermissionMode.AUTO_REVIEW -> "替我审批"
     PermissionMode.FULL_ACCESS -> "完全访问"
     PermissionMode.READ_ONLY -> "只读"
-    null -> state.selectedPermissionProfile?.removePrefix(":") ?: "询问"
+    null -> "自定义"
 }
 
 @Composable
@@ -3312,10 +3425,13 @@ private fun PermissionDropdown(
         val customProfiles = state.permissionProfiles.filter { it.id !in builtInPermissionProfiles }
         if (customProfiles.isNotEmpty()) {
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
-            customProfiles.forEach { profile ->
+            customProfiles.forEachIndexed { index, profile ->
                 PermissionDropdownItem(
-                    title = profile.id,
-                    description = profile.description,
+                    title = "自定义权限 ${index + 1}",
+                    description = profile.description
+                        .takeIf(String::isNotBlank)
+                        ?.localizedCodexDescription()
+                        ?: "由远端 Codex 配置",
                     selected = selectedMode == null && state.selectedPermissionProfile == profile.id,
                     enabled = profile.allowed,
                     onClick = { onSetPermissionProfile(profile.id) },
@@ -3349,7 +3465,7 @@ private fun PermissionDropdownItem(
         enabled = enabled,
         onClick = onClick,
         trailingIcon = {
-            if (selected) Icon(Icons.Outlined.Check, contentDescription = null)
+            if (selected) Icon(CodexIcons.Check, contentDescription = null)
         },
     )
 }
@@ -3357,6 +3473,7 @@ private fun PermissionDropdownItem(
 @Composable
 private fun ContextUsageRing(
     usage: RemoteThreadTokenUsage?,
+    ccSwitchStatus: CcSwitchRemoteStatus?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -3372,22 +3489,39 @@ private fun ContextUsageRing(
         fraction >= 0.7f -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.primary
     }
+    val balance = formatComposerBalance(ccSwitchStatus)
+    val contextDescription = if (usage == null) "上下文用量尚不可用" else "上下文已使用 $percent%"
     IconButton(
         onClick = onClick,
-        modifier = modifier.size(32.dp).semantics {
-            contentDescription = if (usage == null) "上下文用量尚不可用" else "上下文已使用 $percent%"
+        modifier = modifier.size(48.dp).semantics {
+            contentDescription = balance?.let { "余额：$it · $contextDescription" } ?: contextDescription
         },
     ) {
-        Canvas(Modifier.size(21.dp)) {
-            val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
-            drawCircle(track, style = stroke)
-            if (fraction > 0f) {
-                drawArc(
-                    color = progress,
-                    startAngle = -90f,
-                    sweepAngle = 360f * fraction,
-                    useCenter = false,
-                    style = stroke,
+        Box(Modifier.size(34.dp), contentAlignment = Alignment.Center) {
+            Canvas(Modifier.size(34.dp)) {
+                val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
+                drawCircle(track, style = stroke)
+                if (fraction > 0f) {
+                    drawArc(
+                        color = progress,
+                        startAngle = -90f,
+                        sweepAngle = 360f * fraction,
+                        useCenter = false,
+                        style = stroke,
+                    )
+                }
+            }
+            if (balance != null) {
+                Text(
+                    text = balance,
+                    modifier = Modifier.testTag("composer-balance").padding(horizontal = 2.dp),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
                 )
             }
         }
@@ -3441,7 +3575,7 @@ private fun ModelSettingsDropdown(
                         DropdownMenuItem(
                             text = {
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Fast", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+                                    Text("快速模式", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
                                     Text(
                                         if (state.selectedServiceTier == fastTier.id) "开启" else "关闭",
                                         style = MaterialTheme.typography.bodyMedium,
@@ -3462,7 +3596,7 @@ private fun ModelSettingsDropdown(
                     } else {
                         ModelSettingsNavigationRow(
                             label = "速度",
-                            value = selectedTier?.name ?: "标准",
+                            value = selectedTier?.name?.localizedCodexLabel() ?: "标准",
                             onClick = { onPageChange(ModelSettingsPage.SERVICE_TIER) },
                         )
                     }
@@ -3477,7 +3611,7 @@ private fun ModelSettingsDropdown(
                                 Text(model.displayName, style = MaterialTheme.typography.labelLarge)
                                 if (model.description.isNotBlank()) {
                                     Text(
-                                        model.description,
+                                        model.description.localizedCodexDescription(),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 2,
@@ -3491,7 +3625,7 @@ private fun ModelSettingsDropdown(
                             onPageChange(ModelSettingsPage.ROOT)
                         },
                         trailingIcon = {
-                            if (model.id == state.selectedModel) Icon(Icons.Outlined.Check, contentDescription = null)
+                            if (model.id == state.selectedModel) Icon(CodexIcons.Check, contentDescription = null)
                         },
                     )
                 }
@@ -3505,7 +3639,7 @@ private fun ModelSettingsDropdown(
                                 Text(effort.value.displayEffort(), style = MaterialTheme.typography.labelLarge)
                                 if (effort.description.isNotBlank()) {
                                     Text(
-                                        effort.description,
+                                        effort.description.localizedCodexDescription(),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 2,
@@ -3520,7 +3654,7 @@ private fun ModelSettingsDropdown(
                         },
                         trailingIcon = {
                             if (effort.value == state.selectedReasoningEffort) {
-                                Icon(Icons.Outlined.Check, contentDescription = null)
+                                Icon(CodexIcons.Check, contentDescription = null)
                             }
                         },
                     )
@@ -3535,17 +3669,17 @@ private fun ModelSettingsDropdown(
                         onPageChange(ModelSettingsPage.ROOT)
                     },
                     trailingIcon = {
-                        if (state.selectedServiceTier == null) Icon(Icons.Outlined.Check, contentDescription = null)
+                        if (state.selectedServiceTier == null) Icon(CodexIcons.Check, contentDescription = null)
                     },
                 )
                 selectedModel?.serviceTiers.orEmpty().forEach { tier ->
                     DropdownMenuItem(
                         text = {
                             Column {
-                                Text(tier.name, style = MaterialTheme.typography.labelLarge)
+                                Text(tier.name.localizedCodexLabel(), style = MaterialTheme.typography.labelLarge)
                                 if (tier.description.isNotBlank()) {
                                     Text(
-                                        tier.description,
+                                        tier.description.localizedCodexDescription(),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 2,
@@ -3559,7 +3693,7 @@ private fun ModelSettingsDropdown(
                             onPageChange(ModelSettingsPage.ROOT)
                         },
                         trailingIcon = {
-                            if (tier.id == state.selectedServiceTier) Icon(Icons.Outlined.Check, contentDescription = null)
+                            if (tier.id == state.selectedServiceTier) Icon(CodexIcons.Check, contentDescription = null)
                         },
                     )
                 }
@@ -3589,7 +3723,7 @@ private fun ModelSettingsNavigationRow(
                 )
             }
         },
-        trailingIcon = { Icon(Icons.Outlined.ChevronRight, contentDescription = null) },
+        trailingIcon = { Icon(CodexIcons.ChevronRight, contentDescription = null) },
         enabled = enabled,
         onClick = onClick,
     )
@@ -3599,7 +3733,7 @@ private fun ModelSettingsNavigationRow(
 private fun ModelSettingsBackRow(title: String, onClick: () -> Unit) {
     DropdownMenuItem(
         text = { Text(title, style = MaterialTheme.typography.labelLarge) },
-        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回") },
+        leadingIcon = { Icon(CodexIcons.ArrowBack, contentDescription = "返回") },
         onClick = onClick,
     )
     HorizontalDivider(Modifier.padding(horizontal = 12.dp))
@@ -3612,42 +3746,44 @@ internal fun modelSettingsSummary(
 ): String = listOfNotNull(
     modelId?.removePrefix("gpt-")?.removePrefix("GPT-") ?: "模型",
     effort?.displayEffort(),
-    serviceTier?.takeUnless { it.equals("standard", ignoreCase = true) },
+    serviceTier
+        ?.takeUnless { it.equals("standard", ignoreCase = true) }
+        ?.localizedCodexLabel(),
 ).joinToString(" · ")
 
+private fun String.localizedCodexLabel(): String = localizeCodexLabel(this)
+
+private fun String.localizedCodexDescription(): String = localizeCodexDescription(this)
+
 @Composable
-private fun CompactComposerMenuButton(
-    label: String,
-    maxLabelWidth: androidx.compose.ui.unit.Dp,
+private fun CompactComposerIconButton(
+    icon: ImageVector,
+    contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    leadingIcon: ImageVector? = null,
-    showChevron: Boolean = true,
+    selected: Boolean = false,
 ) {
-    Row(
-        modifier = modifier.height(32.dp)
-            .clip(RoundedCornerShape(5.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Box(
+        modifier = modifier.size(48.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+            )
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center,
     ) {
-        leadingIcon?.let {
-            Icon(it, contentDescription = null, modifier = Modifier.size(15.dp))
-            Spacer(Modifier.width(5.dp))
-        }
-        Text(
-            label,
-            modifier = Modifier.widthIn(max = maxLabelWidth),
-            style = MaterialTheme.typography.labelMedium,
-            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(21.dp),
+            tint = if (enabled) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
         )
-        if (showChevron) {
-            Spacer(Modifier.width(2.dp))
-            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(15.dp))
-        }
     }
 }
 
@@ -3657,14 +3793,14 @@ private fun GoalModeIndicator(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier.height(32.dp)
-            .clip(RoundedCornerShape(5.dp))
+        modifier = modifier.heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(6.dp))
             .clickable(onClick = onClear)
             .padding(horizontal = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Icons.Outlined.Flag,
+            CodexIcons.Flag,
             contentDescription = "取消目标标记",
             modifier = Modifier.size(15.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -3711,25 +3847,25 @@ private data class ComposerMentionOption(
 )
 
 internal fun desktopSlashCommands(hasThread: Boolean): List<SlashCommand> = buildList {
-    add(SlashCommand("model", "Choose the model for this task", Icons.Outlined.SmartToy, SlashCommandAction.MODEL))
-    add(SlashCommand("reasoning", "Set reasoning effort", Icons.Outlined.Psychology, SlashCommandAction.REASONING))
-    add(SlashCommand("plan", "Switch this task to Plan mode", Icons.Outlined.Flag, SlashCommandAction.PLAN_MODE))
-    add(SlashCommand("permissions", "Change approval behavior", Icons.Outlined.Tune, SlashCommandAction.PERMISSIONS))
-    add(SlashCommand("skills", "Mention a remote skill", Icons.Outlined.Psychology, SlashCommandAction.SKILLS))
-    add(SlashCommand("plugins", "Mention an installed remote plugin", Icons.Outlined.Extension, SlashCommandAction.PLUGINS))
-    add(SlashCommand("goal", "Set the next message as this task's goal", Icons.Outlined.Flag, SlashCommandAction.GOAL))
-    add(SlashCommand("init", "Create AGENTS.md instructions for this project", Icons.Outlined.Description, SlashCommandAction.INIT))
-    add(SlashCommand("mcp", "Show remote MCP server status", Icons.Outlined.Hub, SlashCommandAction.MCP))
-    add(SlashCommand("feedback", "Send feedback about this task", Icons.Outlined.ErrorOutline, SlashCommandAction.FEEDBACK))
-    add(SlashCommand("compact", "Compact this task's context", Icons.Outlined.Description, SlashCommandAction.COMPACT))
+    add(SlashCommand("model", "选择本任务使用的模型", CodexIcons.SmartToy, SlashCommandAction.MODEL))
+    add(SlashCommand("reasoning", "设置推理强度", CodexIcons.Psychology, SlashCommandAction.REASONING))
+    add(SlashCommand("plan", "切换为计划模式", CodexIcons.Flag, SlashCommandAction.PLAN_MODE))
+    add(SlashCommand("permissions", "更改审批方式", CodexIcons.Tune, SlashCommandAction.PERMISSIONS))
+    add(SlashCommand("skills", "引用远端技能", CodexIcons.Psychology, SlashCommandAction.SKILLS))
+    add(SlashCommand("plugins", "引用已安装的远端插件", CodexIcons.Extension, SlashCommandAction.PLUGINS))
+    add(SlashCommand("goal", "把下一条消息设为本任务目标", CodexIcons.Flag, SlashCommandAction.GOAL))
+    add(SlashCommand("init", "为当前项目创建 AGENTS.md 指引", CodexIcons.Description, SlashCommandAction.INIT))
+    add(SlashCommand("mcp", "查看远端 MCP 服务器状态", CodexIcons.Hub, SlashCommandAction.MCP))
+    add(SlashCommand("feedback", "提交与当前任务有关的反馈", CodexIcons.ErrorOutline, SlashCommandAction.FEEDBACK))
+    add(SlashCommand("compact", "压缩当前任务的上下文", CodexIcons.Description, SlashCommandAction.COMPACT))
     if (hasThread) {
-        add(SlashCommand("rename", "Rename the current task", Icons.Outlined.Edit, SlashCommandAction.RENAME))
-        add(SlashCommand("archive", "Archive the current task", Icons.Outlined.Archive, SlashCommandAction.ARCHIVE))
-        add(SlashCommand("fork", "Continue in a new task", Icons.AutoMirrored.Outlined.CallSplit, SlashCommandAction.FORK))
-        add(SlashCommand("review-mode", "Review uncommitted changes or another target", Icons.Outlined.Code, SlashCommandAction.REVIEW))
+        add(SlashCommand("rename", "重命名当前任务", CodexIcons.Edit, SlashCommandAction.RENAME))
+        add(SlashCommand("archive", "归档当前任务", CodexIcons.Archive, SlashCommandAction.ARCHIVE))
+        add(SlashCommand("fork", "在新任务中继续", CodexIcons.CallSplit, SlashCommandAction.FORK))
+        add(SlashCommand("review-mode", "审查未提交变更或其他目标", CodexIcons.Code, SlashCommandAction.REVIEW))
     }
-    add(SlashCommand("new", "Start a new task in this project", Icons.Outlined.Add, SlashCommandAction.NEW_TASK))
-    add(SlashCommand("status", "Show remote Codex connection status", Icons.Outlined.Computer, SlashCommandAction.STATUS))
+    add(SlashCommand("new", "新建一个远端 Codex 会话", CodexIcons.Add, SlashCommandAction.NEW_TASK))
+    add(SlashCommand("status", "查看远端 Codex 连接状态", CodexIcons.Computer, SlashCommandAction.STATUS))
 }
 
 @Composable
@@ -3755,7 +3891,7 @@ private fun ComposerSuggestionPopup(
             contentPadding = PaddingValues(vertical = 6.dp),
         ) {
             if (triggerKind == ComposerTriggerKind.SLASH_COMMAND) {
-                if (slashCommands.isEmpty()) item { ComposerPopupMessage("No commands found") }
+                if (slashCommands.isEmpty()) item { ComposerPopupMessage("没有匹配的命令") }
                 items(slashCommands, key = { "slash-${it.name}" }) { command ->
                     ComposerPopupRow(
                         icon = command.icon,
@@ -3768,9 +3904,9 @@ private fun ComposerSuggestionPopup(
                 item {
                     Text(
                         when (mentionKindFilter) {
-                            ComposerMentionKind.SKILL -> "SKILLS"
-                            ComposerMentionKind.PLUGIN -> "PLUGINS"
-                            null -> "SKILLS & PLUGINS"
+                            ComposerMentionKind.SKILL -> "技能"
+                            ComposerMentionKind.PLUGIN -> "插件"
+                            null -> "技能与插件"
                         },
                         modifier = Modifier.padding(horizontal = 13.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelMedium,
@@ -3781,7 +3917,7 @@ private fun ComposerSuggestionPopup(
                     val detail = option.description.takeIf(String::isNotBlank)
                         ?.let { "${option.token} · $it" } ?: option.token
                     ComposerPopupRow(
-                        icon = if (option.kind == ComposerMentionKind.SKILL) Icons.Outlined.Psychology else Icons.Outlined.Extension,
+                        icon = if (option.kind == ComposerMentionKind.SKILL) CodexIcons.Psychology else CodexIcons.Extension,
                         title = option.title,
                         description = detail,
                         onClick = { onMention(option) },
@@ -3791,9 +3927,9 @@ private fun ComposerSuggestionPopup(
                     item {
                         ComposerPopupMessage(
                             when {
-                                loading -> "Loading from remote Codex…"
+                                loading -> "正在从远端 Codex 加载…"
                                 !error.isNullOrBlank() -> error
-                                else -> "No matching remote skills or installed plugins"
+                                else -> "没有匹配的远端技能或已安装插件"
                             },
                         )
                     }
@@ -3812,6 +3948,7 @@ private fun ComposerPopupRow(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+            .testTag("composer-suggestion-$title")
             .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -3851,9 +3988,9 @@ private fun RemoteAuthenticationState(
             Modifier.widthIn(max = 440.dp).padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(Icons.Outlined.Key, contentDescription = null, modifier = Modifier.size(34.dp))
+            Icon(CodexIcons.Key, contentDescription = null, modifier = Modifier.size(34.dp))
             Spacer(Modifier.height(16.dp))
-            Text("Sign in to remote Codex", style = MaterialTheme.typography.titleLarge)
+            Text("登录远端 Codex", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(6.dp))
             Text(
                 "SSH 已连接，但远端 Codex 没有可用账号。登录会发生在远端主机，完成后会自动加载模型。",
@@ -3861,12 +3998,12 @@ private fun RemoteAuthenticationState(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(18.dp))
-            Button(onClick = onLogin, enabled = !loading) {
+            CodexButton(onClick = onLogin, enabled = !loading) {
                 if (loading) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(if (loading) "Starting sign-in" else "Sign in with ChatGPT")
+                Text(if (loading) "正在启动登录" else "使用 ChatGPT 登录")
             }
         }
     }
@@ -3891,7 +4028,7 @@ private fun ConnectionState(
             Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (action != null) {
                 Spacer(Modifier.height(18.dp))
-                OutlinedButton(onClick = action) { Text("Connections") }
+                CodexOutlinedButton(onClick = action) { Text("连接管理") }
             }
         }
     }
@@ -3913,7 +4050,7 @@ private fun ApprovalDialog(
         onDismissRequest = {},
         icon = {
             Icon(
-                if (approval.kind == ApprovalKind.FILE_CHANGE) Icons.Outlined.Code else Icons.Outlined.Terminal,
+                if (approval.kind == ApprovalKind.FILE_CHANGE) CodexIcons.Code else CodexIcons.Terminal,
                 contentDescription = null,
             )
         },
@@ -3936,7 +4073,7 @@ private fun ApprovalDialog(
                                     .padding(10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                if (selected) Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(17.dp))
+                                if (selected) Icon(CodexIcons.Check, contentDescription = null, modifier = Modifier.size(17.dp))
                                 else Spacer(Modifier.width(17.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(option)
@@ -3945,7 +4082,7 @@ private fun ApprovalDialog(
                         OutlinedTextField(
                             value = answers[question.id].orEmpty(),
                             onValueChange = { answers[question.id] = it },
-                            label = { Text("Response") },
+                            label = { Text("回复") },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -3959,17 +4096,17 @@ private fun ApprovalDialog(
             }
         },
         confirmButton = {
-            Button(onClick = {
+            CodexButton(onClick = {
                 onDecision("accept", answers.mapValues { listOf(it.value) })
             }, enabled = approval.kind != ApprovalKind.USER_INPUT || answers.values.all { it.isNotBlank() }) {
-                Text(if (approval.kind == ApprovalKind.USER_INPUT) "Send" else "Allow once")
+                Text(if (approval.kind == ApprovalKind.USER_INPUT) "发送" else "允许一次")
             }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = { onDecision("decline", emptyMap()) }) { Text("Deny") }
+                TextButton(onClick = { onDecision("decline", emptyMap()) }) { Text("拒绝") }
                 if (approval.kind == ApprovalKind.COMMAND || approval.kind == ApprovalKind.FILE_CHANGE) {
-                    TextButton(onClick = { onDecision("acceptForSession", emptyMap()) }) { Text("Allow session") }
+                    TextButton(onClick = { onDecision("acceptForSession", emptyMap()) }) { Text("本次会话允许") }
                 }
             }
         },
@@ -3985,21 +4122,21 @@ private fun RenameThreadDialog(
     var name by remember(thread.id) { mutableStateOf(thread.title) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
-        title = { Text("Rename task") },
+        icon = { Icon(CodexIcons.Edit, contentDescription = null) },
+        title = { Text("重命名任务") },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                label = { Text("Task name") },
+                label = { Text("任务名称") },
             )
         },
         confirmButton = {
-            Button(onClick = { onRename(name.trim()) }, enabled = name.isNotBlank()) { Text("Save") }
+            CodexButton(onClick = { onRename(name.trim()) }, enabled = name.isNotBlank()) { Text("保存") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 
@@ -4011,13 +4148,13 @@ private fun ArchiveThreadDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Outlined.Archive, contentDescription = null) },
-        title = { Text("Archive task?") },
+        icon = { Icon(CodexIcons.Archive, contentDescription = null) },
+        title = { Text("归档任务？") },
         text = {
-            Text("${thread.title} will be removed from Projects. Its remote Codex history is preserved in the archive.")
+            Text("“${thread.title}”将从项目列表中移除，远端 Codex 历史仍保留在归档中。")
         },
-        confirmButton = { Button(onClick = onArchive) { Text("Archive") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { CodexButton(onClick = onArchive) { Text("归档") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 
@@ -4029,8 +4166,8 @@ private fun RemoteDeviceLoginDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        icon = { Icon(Icons.Outlined.Key, contentDescription = null) },
-        title = { Text("Sign in to remote Codex") },
+        icon = { Icon(CodexIcons.Key, contentDescription = null) },
+        title = { Text("登录远端 Codex") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("在浏览器中打开登录页并输入设备码。完成后此窗口会自动关闭。")
@@ -4052,8 +4189,8 @@ private fun RemoteDeviceLoginDialog(
                 }
             }
         },
-        confirmButton = { Button(onClick = onOpen) { Text("Open sign-in page") } },
-        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+        confirmButton = { CodexButton(onClick = onOpen) { Text("打开登录页") } },
+        dismissButton = { TextButton(onClick = onCancel) { Text("取消") } },
     )
 }
 
@@ -4066,8 +4203,8 @@ private fun HostKeyConfirmationDialog(
 ) {
     AlertDialog(
         onDismissRequest = {},
-        icon = { Icon(Icons.Outlined.Key, contentDescription = null) },
-        title = { Text("Verify SSH host") },
+        icon = { Icon(CodexIcons.Key, contentDescription = null) },
+        title = { Text("验证 SSH 主机") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(host, style = MaterialTheme.typography.titleMedium)
@@ -4083,8 +4220,8 @@ private fun HostKeyConfirmationDialog(
                 )
             }
         },
-        confirmButton = { Button(onClick = onTrust) { Text("Trust & connect") } },
-        dismissButton = { TextButton(onClick = onReject) { Text("Cancel") } },
+        confirmButton = { CodexButton(onClick = onTrust) { Text("信任并连接") } },
+        dismissButton = { TextButton(onClick = onReject) { Text("取消") } },
     )
 }
 
@@ -4110,7 +4247,7 @@ private fun String.displayEffort(): String = when (lowercase()) {
 private fun readComposerImageAttachment(context: Context, uri: Uri): ComposerImageAttachment {
     val resolver = context.contentResolver
     val mimeType = resolver.getType(uri)?.takeIf { it.startsWith("image/") }
-        ?: throw IllegalArgumentException("Only image attachments are supported")
+        ?: throw IllegalArgumentException("仅支持图片附件")
     var displayName = "image"
     var declaredSize: Long? = null
     resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
@@ -4122,11 +4259,11 @@ private fun readComposerImageAttachment(context: Context, uri: Uri): ComposerIma
         }
     }
     if (declaredSize != null && declaredSize!! > MAX_COMPOSER_IMAGE_BYTES) {
-        throw IllegalArgumentException("Image must be 20 MB or smaller")
+        throw IllegalArgumentException("图片大小不能超过 20 MB")
     }
     val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
-        ?: throw IllegalArgumentException("Unable to read selected image")
-    if (bytes.size > MAX_COMPOSER_IMAGE_BYTES) throw IllegalArgumentException("Image must be 20 MB or smaller")
+        ?: throw IllegalArgumentException("无法读取所选图片")
+    if (bytes.size > MAX_COMPOSER_IMAGE_BYTES) throw IllegalArgumentException("图片大小不能超过 20 MB")
     return ComposerImageAttachment(
         displayName = displayName,
         mimeType = mimeType,

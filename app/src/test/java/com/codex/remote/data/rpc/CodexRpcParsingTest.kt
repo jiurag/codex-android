@@ -115,11 +115,35 @@ class CodexRpcParsingTest {
     }
 
     @Test
+    fun preservesCodex0165CollaborationMaskWithNullMode() {
+        val mode = CodexRpcClient.parseCollaborationMode(
+            json.parseToJsonElement(
+                """{"name":"Future preset","mode":null,"model":"deepseek-v4-pro","reasoning_effort":null}""",
+            ),
+        )
+
+        assertEquals("Future preset", mode?.name)
+        assertNull(mode?.mode)
+        assertEquals("deepseek-v4-pro", mode?.model)
+    }
+
+    @Test
+    fun parsesCodex0165FunctionCallOutput() {
+        val item = parse(
+            """{"type":"functionCallOutput","id":"function-output-1","name":"lookup","namespace":"tools","output":[{"type":"input_text","text":"result text"},{"type":"input_image","image_url":"https://example.invalid/image.png"}]}""",
+        )
+
+        assertEquals(TimelineKind.TOOL, item?.kind)
+        assertEquals("函数输出：lookup", item?.title)
+        assertEquals("result text\n图片：https://example.invalid/image.png", item?.body)
+    }
+
+    @Test
     fun preservesContextCompactionInImportedHistory() {
         val item = parse("""{"type":"contextCompaction","id":"compact-1"}""")
 
         assertEquals(TimelineKind.COMPACTION, item?.kind)
-        assertEquals("Context compacted", item?.title)
+        assertEquals("上下文已压缩", item?.title)
     }
 
     @Test

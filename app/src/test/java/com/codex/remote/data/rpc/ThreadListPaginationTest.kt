@@ -25,6 +25,7 @@ class ThreadListPaginationTest {
         val capabilities = params.getValue("capabilities").jsonObject
 
         assertEquals("codex_remote_android", clientInfo.getValue("name").jsonPrimitive.content)
+        assertEquals("Codex", clientInfo.getValue("title").jsonPrimitive.content)
         assertEquals(BuildConfig.VERSION_NAME, clientInfo.getValue("version").jsonPrimitive.content)
         assertTrue(capabilities.getValue("experimentalApi").jsonPrimitive.content.toBoolean())
         assertFalse(capabilities.getValue("requestAttestation").jsonPrimitive.content.toBoolean())
@@ -64,6 +65,21 @@ class ThreadListPaginationTest {
         assertEquals("workspace-write", params.getValue("sandbox").jsonPrimitive.content)
         assertFalse(params.containsKey("effort"))
         assertTrue(params.keys.all { it in setOf("cwd", "model", "approvalPolicy", "approvalsReviewer", "sandbox") })
+    }
+
+    @Test
+    fun threadStartOmitsMissingOrBlankCwd() {
+        listOf(null, "", "   ").forEach { cwd ->
+            val params = CodexRpcClient.threadStartParams(
+                cwd = cwd,
+                model = "deepseek-v4-flash",
+                approvalPolicy = "on-request",
+            )
+
+            assertFalse(params.containsKey("cwd"))
+            assertEquals("on-request", params.getValue("approvalPolicy").jsonPrimitive.content)
+            assertEquals("workspace-write", params.getValue("sandbox").jsonPrimitive.content)
+        }
     }
 
     @Test

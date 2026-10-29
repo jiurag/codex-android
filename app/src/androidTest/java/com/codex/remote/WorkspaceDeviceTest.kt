@@ -1,36 +1,56 @@
 package com.codex.remote
 
+import android.content.ContentValues
 import android.graphics.Typeface
+import android.graphics.Bitmap
+import android.os.Environment
+import android.provider.MediaStore
 import android.text.Spanned
 import android.text.style.StyleSpan
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.codex.remote.data.rpc.CodexRpcClient
 import com.codex.remote.data.store.ConnectionStore
 import com.codex.remote.domain.AppUiState
 import com.codex.remote.domain.AuthType
+import com.codex.remote.domain.CcSwitchQuotaSnapshot
+import com.codex.remote.domain.CcSwitchRemoteStatus
 import com.codex.remote.domain.ComposerImageAttachment
 import com.codex.remote.domain.ComposerMention
 import com.codex.remote.domain.FileChangeSummary
@@ -39,6 +59,7 @@ import com.codex.remote.domain.ReasoningEffortOption
 import com.codex.remote.domain.RemoteAccount
 import com.codex.remote.domain.RemoteCollaborationMode
 import com.codex.remote.domain.RemoteModel
+import com.codex.remote.domain.RemoteMcpServerStatus
 import com.codex.remote.domain.RemotePlugin
 import com.codex.remote.domain.RemoteProject
 import com.codex.remote.domain.RemoteServiceTier
@@ -81,7 +102,8 @@ class WorkspaceDeviceTest {
 
         composeRule.onAllNodesWithText("Default", substring = true).assertCountEquals(0)
         composeRule.onAllNodesWithText("Plan", substring = true).assertCountEquals(0)
-        composeRule.onNodeWithText("5.6-sol · 极高 · Fast").assertExists()
+        composeRule.onNodeWithTag(COMPOSER_MODEL)
+            .assertContentDescriptionEquals("模型：5.6-sol · 极高 · 快速")
         composeRule.onNodeWithTag(COMPOSER_CONTEXT).assertContentDescriptionEquals("上下文已使用 64%")
 
         val add = composeRule.onNodeWithTag(COMPOSER_ADD).fetchSemanticsNode().boundsInRoot
@@ -103,6 +125,340 @@ class WorkspaceDeviceTest {
         composeRule.runOnIdle { assertEquals("plan", callbacks.collaborationMode) }
         composeRule.onAllNodesWithText("Default", substring = true).assertCountEquals(0)
         composeRule.onAllNodesWithText("Plan mode", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun connectionLossShowsDisconnectedStateWithoutBlamingCcSwitch() {
+        val message = "SSH 连接已断开，请重新连接。"
+        val state = mutableStateOf(
+            baseState().copy(
+                connectionStatus = com.codex.remote.domain.ConnectionStatus.DISCONNECTED,
+                connectionMessage = message,
+                ccSwitchStatus = null,
+                statusError = null,
+            ),
+        )
+        show(state, WorkspaceCallbacks())
+
+        composeRule.onNodeWithText("已断开连接").assertIsDisplayed()
+        composeRule.onNodeWithText(message).assertIsDisplayed()
+        composeRule.onNodeWithText("连接管理").assertIsDisplayed()
+        composeRule.onAllNodesWithText("CC Switch", substring = true).assertCountEquals(0)
+        captureReviewScreenshot("ssh-connection-lost.png")
+    }
+
+    @Test
+    fun zeroHistoryCanStartNewSessionAndRevealComposer() {
+        val base = baseState(threads = emptyList())
+        val state = mutableStateOf(
+            base.copy(
+                projects = emptyList(),
+                selectedProjectPath = null,
+                selectedThreadId = null,
+                timeline = emptyList(),
+                connectionMessage = "已导入 0 个项目、0 个会话 · Codex 0.165.0",
+            ),
+        )
+        var newThreadClicks = 0
+        show(
+            state = state,
+            onNewThread = {
+                newThreadClicks += 1
+                val created = RemoteThread(
+                    id = "new-thread",
+                    title = "新会话",
+                    cwd = "/root",
+                    updatedAt = 2,
+                    status = "idle",
+                )
+                // Reproduce thread/started followed by a thread/list refresh that is still empty.
+                val visibleAfterRefresh = mergeVisibleThreads(
+                    serverThreads = emptyList(),
+                    unlistedThreads = listOf(created),
+                )
+                state.value = state.value.copy(
+                    threads = visibleAfterRefresh,
+                    projects = listOf(
+                        RemoteProject(
+                            id = "/root",
+                            name = "root",
+                            path = "/root",
+                            threads = visibleAfterRefresh,
+                            updatedAt = 2,
+                        ),
+                    ),
+                    selectedProjectPath = "/root",
+                    selectedThreadId = created.id,
+                    connectionMessage = "已导入 1 个项目、1 个会话 · Codex 0.165.0",
+                )
+            },
+        )
+
+        composeRule.onNodeWithContentDescription("打开会话").performClick()
+        composeRule.onNodeWithText("新建会话").assertIsDisplayed().performClick()
+        composeRule.runOnIdle { assertEquals(1, newThreadClicks) }
+        composeRule.onNodeWithTag(COMPOSER_INPUT).assertIsDisplayed()
+        captureReviewScreenshot("zero-history-new-session-composer.png")
+    }
+
+    @Test
+    fun longModelNameKeepsNarrowLargeTextComposerInsideItsSurface() {
+        val base = baseState()
+        val longModel = base.models.single().copy(
+            id = "deepseek-v4-flash",
+            displayName = "DeepSeek V4 Flash",
+        )
+        val state = mutableStateOf(
+            base.copy(
+                models = listOf(longModel),
+                selectedModel = longModel.id,
+                selectedReasoningEffort = "high",
+                selectedServiceTier = null,
+            ),
+        )
+        show(state)
+
+        assertComposerControlsInsideSurface()
+        captureReviewScreenshot("composer-narrow-320-font-1.3.png")
+    }
+
+    @Test
+    fun longModelNameKeepsLargeTextPhoneComposerInsideItsSurface() {
+        val base = baseState()
+        val longModel = base.models.single().copy(
+            id = "deepseek-v4-flash",
+            displayName = "DeepSeek V4 Flash",
+        )
+        val state = mutableStateOf(
+            base.copy(
+                models = listOf(longModel),
+                selectedModel = longModel.id,
+                selectedReasoningEffort = "high",
+                selectedServiceTier = null,
+            ),
+        )
+        show(state, contentWidth = 411.dp, fontScale = 1.3f)
+
+        assertComposerControlsInsideSurface()
+        captureReviewScreenshot("composer-phone-411-font-1.3.png")
+    }
+
+    @Test
+    fun iconOnlyComposerUsesOneRowAtCommonPhoneWidth() {
+        val base = baseState()
+        val longModel = base.models.single().copy(
+            id = "deepseek-v4-flash",
+            displayName = "DeepSeek V4 Flash",
+        )
+        val state = mutableStateOf(
+            base.copy(
+                models = listOf(longModel),
+                selectedModel = longModel.id,
+                selectedReasoningEffort = "high",
+                selectedServiceTier = null,
+            ),
+        )
+        show(state, contentWidth = 360.dp, fontScale = 1f)
+
+        assertComposerControlsInsideSurface()
+        val add = composeRule.onNodeWithTag(COMPOSER_ADD).fetchSemanticsNode().boundsInRoot
+        val context = composeRule.onNodeWithTag(COMPOSER_CONTEXT).fetchSemanticsNode().boundsInRoot
+        val model = composeRule.onNodeWithTag(COMPOSER_MODEL).fetchSemanticsNode().boundsInRoot
+        val send = composeRule.onNodeWithTag(COMPOSER_SEND).fetchSemanticsNode().boundsInRoot
+        val rowCenters = listOf(add.center.y, context.center.y, model.center.y, send.center.y)
+        assertTrue(
+            "图标操作区没有保持单行",
+            rowCenters.maxOrNull()!! - rowCenters.minOrNull()!! <= 1f,
+        )
+        composeRule.onAllNodesWithText("deepseek-v4-flash", substring = true).assertCountEquals(0)
+        captureReviewScreenshot("composer-phone-360-icon-only.png")
+    }
+
+    private fun assertComposerControlsInsideSurface() {
+        val surface = composeRule.onNodeWithTag(COMPOSER_SURFACE).fetchSemanticsNode().boundsInRoot
+        val add = composeRule.onNodeWithTag(COMPOSER_ADD).fetchSemanticsNode().boundsInRoot
+        val permissions = composeRule.onNodeWithTag(COMPOSER_PERMISSIONS).fetchSemanticsNode().boundsInRoot
+        val context = composeRule.onNodeWithTag(COMPOSER_CONTEXT).fetchSemanticsNode().boundsInRoot
+        val model = composeRule.onNodeWithTag(COMPOSER_MODEL).fetchSemanticsNode().boundsInRoot
+        val send = composeRule.onNodeWithTag(COMPOSER_SEND).fetchSemanticsNode().boundsInRoot
+        val minTouchPx = 48f * composeRule.activity.resources.displayMetrics.density
+
+        assertTrue("发送按钮超出输入框右边界", send.right <= surface.right)
+        assertFalse(
+            "模型按钮与发送按钮重叠",
+            model.left < send.right && send.left < model.right &&
+                model.top < send.bottom && send.top < model.bottom,
+        )
+        assertFalse(
+            "上下文按钮与发送按钮重叠",
+            context.left < send.right && send.left < context.right &&
+                context.top < send.bottom && send.top < context.bottom,
+        )
+        assertTrue("添加按钮触控区不足 48dp", add.width + 0.5f >= minTouchPx)
+        assertTrue("权限按钮触控区不足 48dp", permissions.height + 0.5f >= minTouchPx)
+        assertTrue("上下文按钮触控区不足 48dp", context.width + 0.5f >= minTouchPx)
+        assertTrue("模型按钮触控区不足 48dp", model.width + 0.5f >= minTouchPx)
+        assertTrue("发送按钮触控区不足 48dp", send.width + 0.5f >= minTouchPx)
+        assertTrue("发送按钮底部超出输入框", send.bottom <= surface.bottom)
+    }
+
+    private fun captureReviewScreenshot(fileName: String) {
+        val contextActivity = InstrumentationRegistry.getInstrumentation().targetContext
+        val pendingImage = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(
+                MediaStore.Images.Media.RELATIVE_PATH,
+                "${Environment.DIRECTORY_PICTURES}/CodexReview",
+            )
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+        val screenshotUri = contextActivity.contentResolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            pendingImage,
+        )
+        assertNotNull("Composer 截图条目未创建", screenshotUri)
+        contextActivity.contentResolver.openOutputStream(requireNotNull(screenshotUri)).use { output ->
+            assertNotNull("Composer 截图输出流未创建", output)
+            composeRule.onRoot().captureToImage().asAndroidBitmap()
+                .compress(Bitmap.CompressFormat.PNG, 100, requireNotNull(output))
+        }
+        contextActivity.contentResolver.update(
+            requireNotNull(screenshotUri),
+            ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },
+            null,
+            null,
+        )
+    }
+
+    @Test
+    fun remoteStatusUsesCcSwitchQuotaInsteadOfCodexAccountAuthentication() {
+        val state = mutableStateOf(
+            baseState().copy(
+                ccSwitchStatus = CcSwitchRemoteStatus(
+                    providerId = "deepseek",
+                    providerName = "DeepSeek",
+                    status = "ok",
+                    available = true,
+                    queriedAt = 1_793_253_980_715,
+                    quotas = listOf(
+                        CcSwitchQuotaSnapshot(
+                            planName = "CNY",
+                            remaining = "123.45",
+                            unit = "CNY",
+                            isValid = true,
+                        ),
+                    ),
+                    error = null,
+                ),
+            ),
+        )
+        show(state, contentWidth = 320.dp, fontScale = 1.3f)
+
+        composeRule.onNodeWithTag(COMPOSER_CONTEXT).performClick()
+
+        composeRule.onNodeWithText("数据源").assertIsDisplayed()
+        composeRule.onNodeWithText("CC Switch").assertIsDisplayed()
+        composeRule.onNodeWithText("DeepSeek").assertIsDisplayed()
+        composeRule.onNodeWithText("剩余 123.45 CNY").assertIsDisplayed()
+        composeRule.onAllNodesWithText("SSH 认证失败", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun composerRingShowsLiveCcSwitchBalanceWithoutReplacingContextState() {
+        val state = mutableStateOf(
+            baseState().copy(
+                ccSwitchStatus = CcSwitchRemoteStatus(
+                    providerId = "deepseek",
+                    providerName = "DeepSeek",
+                    status = "ok",
+                    available = true,
+                    queriedAt = 1_793_253_980_715,
+                    quotas = listOf(
+                        CcSwitchQuotaSnapshot(
+                            planName = "CNY",
+                            remaining = "123.45",
+                            unit = "CNY",
+                            isValid = true,
+                        ),
+                    ),
+                    error = null,
+                ),
+            ),
+        )
+        show(state, contentWidth = 320.dp, fontScale = 1.3f)
+
+        composeRule.onNodeWithTag(COMPOSER_CONTEXT)
+            .assertContentDescriptionEquals("余额：123 · 上下文已使用 64%")
+        composeRule.onNodeWithTag("composer-balance", useUnmergedTree = true)
+            .assertTextEquals("123")
+            .assertIsDisplayed()
+        composeRule.onAllNodesWithText("¥").assertCountEquals(0)
+        composeRule.onAllNodesWithText(".54", substring = true).assertCountEquals(0)
+        assertComposerControlsInsideSurface()
+        captureReviewScreenshot("composer-cswitch-balance-320-font-1.3.png")
+    }
+
+    @Test
+    fun automaticApprovalNoticeIsDisplayedInSimplifiedChinese() {
+        val state = mutableStateOf(
+            baseState().copy(
+                notice = "Automatic approval review approved (risk: low, authorization: unknown): " +
+                    "Auto-review returned a low-risk allow decision.",
+            ),
+        )
+        show(state)
+
+        composeRule.onNodeWithText(
+            "自动审批：已批准本次操作（风险：低；授权状态：未知）。" +
+                "审查程序判定为低风险，允许继续。",
+        ).assertIsDisplayed()
+        composeRule.onAllNodesWithText(
+            "Automatic approval review approved",
+            substring = true,
+        ).assertCountEquals(0)
+        composeRule.onAllNodesWithText(
+            "Auto-review returned",
+            substring = true,
+        ).assertCountEquals(0)
+    }
+
+    @Test
+    fun remoteModelMetadataAndMcpCountsAreDisplayedInSimplifiedChinese() {
+        val base = baseState()
+        val model = base.models.single().copy(
+            description = "Provider-specific detail",
+            supportedReasoningEfforts = listOf(ReasoningEffortOption("medium", "Balanced")),
+            serviceTiers = listOf(RemoteServiceTier("fast", "Fast", "Priority processing")),
+        )
+        val state = mutableStateOf(
+            base.copy(
+                models = listOf(model),
+                selectedReasoningEffort = "medium",
+                mcpServers = listOf(
+                    RemoteMcpServerStatus(
+                        name = "qa-remote",
+                        authStatus = "unsupported",
+                        toolCount = 1,
+                        resourceCount = 2,
+                    ),
+                ),
+            ),
+        )
+        var mcpLoaded = false
+        show(state, onLoadMcpStatus = { mcpLoaded = true })
+
+        composeRule.onNodeWithTag(COMPOSER_MODEL).performClick()
+        composeRule.onNodeWithText("模型").performClick()
+        composeRule.onNodeWithText("详细说明由远端服务提供").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Provider-specific detail").assertCountEquals(0)
+
+        composeRule.onNodeWithTag(COMPOSER_INPUT).performTextInput("/mcp")
+        composeRule.onNodeWithTag("composer-suggestion-/mcp").performClick()
+        composeRule.runOnIdle { assertTrue(mcpLoaded) }
+        composeRule.onNodeWithText("1 个工具 · 2 个资源").assertIsDisplayed()
+        composeRule.onAllNodesWithText("tools", substring = true).assertCountEquals(0)
+        composeRule.onAllNodesWithText("resources", substring = true).assertCountEquals(0)
     }
 
     @Test
@@ -432,8 +788,8 @@ val answer = 42
         composeRule.onNodeWithText("已编辑 2 个文件").performClick()
         composeRule.onNodeWithText("app/src/Main.kt").assertExists()
         composeRule.onNodeWithText("app/src/Status.kt").assertExists()
-        composeRule.onNodeWithText("Modified").assertExists()
-        composeRule.onNodeWithText("Added").assertExists()
+        composeRule.onNodeWithText("修改").assertExists()
+        composeRule.onNodeWithText("新增").assertExists()
         composeRule.onNodeWithText("+2  -1").assertExists()
         composeRule.onAllNodesWithText("Changes").assertCountEquals(0)
         composeRule.onAllNodesWithText("{\"changes\"", substring = true).assertCountEquals(0)
@@ -450,52 +806,70 @@ val answer = 42
     private fun show(
         state: MutableState<AppUiState>,
         callbacks: WorkspaceCallbacks = WorkspaceCallbacks(),
+        contentWidth: Dp? = null,
+        fontScale: Float = 1f,
+        onNewThread: () -> Unit = {},
+        onLoadMcpStatus: () -> Unit = {},
     ) {
         composeRule.setContent {
-            CodexRemoteTheme(darkTheme = false) {
-                WorkspaceScreen(
-                    state = state.value,
-                    onOpenConnections = {},
-                    onNewThread = {},
-                    onSelectProject = {},
-                    onSelectThread = {},
-                    onLoadOlderHistory = callbacks.onLoadOlder,
-                    onRenameThread = { _, _ -> },
-                    onArchiveThread = {},
-                    onLoadArchivedThreads = {},
-                    onUnarchiveThread = {},
-                    onDeleteArchivedThread = {},
-                    onSetThreadPinned = { _, _ -> },
-                    onSend = callbacks.onSend,
-                    onStop = {},
-                    onCompactThread = {},
-                    onForkThread = {},
-                    onStartReview = { _, _ -> },
-                    onRunInit = {},
-                    onLoadMcpStatus = {},
-                    onReloadMcpServers = {},
-                    onStartMcpLogin = {},
-                    onMcpAuthorizationHandled = {},
-                    onSubmitFeedback = { _, _ -> },
-                    onSetGoal = callbacks.onSetGoal,
-                    onSetGoalStatus = {},
-                    onClearGoal = {},
-                    onShowStatus = {},
-                    onSetModel = {},
-                    onSetReasoningEffort = {},
-                    onSetServiceTier = {},
-                    onSetCollaborationMode = { callbacks.collaborationMode = it },
-                    onSetPermissionProfile = {},
-                    onSetPermissionMode = { callbacks.permissionMode = it },
-                    onLoadRemoteDirectory = {},
-                    onClearRemoteDirectory = {},
-                    onStartLogin = {},
-                    onCancelLogin = {},
-                    onApproval = { _, _ -> },
-                    onTrustHostKey = {},
-                    onRejectHostKey = {},
-                    onDismissNotice = {},
-                )
+            val density = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density, fontScale = fontScale),
+            ) {
+                CodexRemoteTheme(darkTheme = false) {
+                    val screen: @androidx.compose.runtime.Composable () -> Unit = {
+                        WorkspaceScreen(
+                            state = state.value,
+                            onOpenConnections = {},
+                            onNewThread = onNewThread,
+                            onSelectProject = {},
+                            onSelectThread = {},
+                            onLoadOlderHistory = callbacks.onLoadOlder,
+                            onRenameThread = { _, _ -> },
+                            onArchiveThread = {},
+                            onLoadArchivedThreads = {},
+                            onUnarchiveThread = {},
+                            onDeleteArchivedThread = {},
+                            onSetThreadPinned = { _, _ -> },
+                            onSend = callbacks.onSend,
+                            onStop = {},
+                            onCompactThread = {},
+                            onForkThread = {},
+                            onStartReview = { _, _ -> },
+                            onRunInit = {},
+                            onLoadMcpStatus = onLoadMcpStatus,
+                            onReloadMcpServers = {},
+                            onStartMcpLogin = {},
+                            onMcpAuthorizationHandled = {},
+                            onSubmitFeedback = { _, _ -> },
+                            onSetGoal = callbacks.onSetGoal,
+                            onSetGoalStatus = {},
+                            onClearGoal = {},
+                            onShowStatus = {},
+                            onSetModel = {},
+                            onSetReasoningEffort = {},
+                            onSetServiceTier = {},
+                            onSetCollaborationMode = { callbacks.collaborationMode = it },
+                            onSetPermissionProfile = {},
+                            onSetPermissionMode = { callbacks.permissionMode = it },
+                            onLoadRemoteDirectory = {},
+                            onClearRemoteDirectory = {},
+                            onStartLogin = {},
+                            onCancelLogin = {},
+                            onApproval = { _, _ -> },
+                            onTrustHostKey = {},
+                            onRejectHostKey = {},
+                            onDismissNotice = {},
+                        )
+                    }
+                    if (contentWidth == null) {
+                        screen()
+                    } else {
+                        Box(Modifier.width(contentWidth).fillMaxHeight()) {
+                            screen()
+                        }
+                    }
+                }
             }
         }
     }
@@ -677,4 +1051,5 @@ private const val COMPOSER_PERMISSIONS = "composer-permissions"
 private const val COMPOSER_CONTEXT = "composer-context"
 private const val COMPOSER_MODEL = "composer-model"
 private const val COMPOSER_SEND = "composer-send"
+private const val COMPOSER_SURFACE = "composer-surface"
 private const val COMPOSER_GOAL_MARKER = "composer-goal-marker"

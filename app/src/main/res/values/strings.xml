@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">Codex Remote</string>
+    <string name="app_name">Codex</string>
+    <string name="misans_attribution">界面字体：MiSans（小米）</string>
 </resources>

@@ -2,6 +2,9 @@
 /.idea/
 /.kotlin/
 /.tooling/
+/.tmp-misans/
+/review/
+/signing/
 /local.properties
 /*-qa.png
 **/build/

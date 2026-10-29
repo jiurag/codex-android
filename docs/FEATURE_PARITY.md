@@ -1,56 +1,57 @@
-# Desktop feature parity audit
+# 桌面版功能对照
 
-Audit baseline:
+审计基线：
 
-- Codex Desktop `26.721.4979.0` command registrations and remote-host request bridge.
-- Open-source Codex app-server schema from `codex-rs/app-server-protocol`.
-- Android remains an SSH client only; agent execution stays on the remote host.
+- Codex Desktop 命令注册与远程主机请求桥接。
+- 开源 Codex `codex-rs/app-server-protocol`。
+- `codex-cli 0.165.0` 的官方 JSON Schema。
+- Android 只负责 SSH 连接和界面展示，Agent 始终在远端主机运行。
 
-## Implemented remote workflow
+## 已实现的远端工作流
 
-| Area | Android support |
+| 功能区域 | Android 当前支持 |
 | --- | --- |
-| Host discovery | Imports every active remote thread with cursor pagination and no project filter; groups projects by thread `cwd`. |
-| Thread lifecycle | Start, paginated resume, rename, pin, archive, browse archived tasks, unarchive, permanently delete, fork, and compact. |
-| Turns | Load the latest five full turns first, fetch older pages at the top with `thread/turns/list`, preserve scroll position, start, stream, steer, interrupt, and render every current `ThreadItem` variant. |
-| Composer | Desktop-style plus menu, remote file/folder references, Android image input, Goal/Plan actions, remote skill/plugin `$` mentions, slash commands, model, reasoning, service tier, collaboration mode, and permissions. |
-| Commands | `/compact`, `/feedback`, `/fork`, `/goal`, `/init`, `/mcp`, `/model`, `/new`, `/plan`, `/reasoning`, `/review-mode`, and `/status`, plus task-management shortcuts. |
-| Goals | Desktop-style removable Goal marker for the next composer submission, plus read, create, edit, pause, resume, clear, and continue persisted remote goals. |
-| Review and file changes | Start inline reviews and render structured, expandable changed-file summaries in the conversation. There is no separate Changes tab. |
-| Long conversations | Open at the latest message, load older turns incrementally while scrolling upward, preserve the visible anchor during prepend, and show a return-to-latest button away from the bottom. |
-| MCP | Show server/tool/resource status, start OAuth, observe completion, and reload remote MCP configuration. |
-| Authentication | Reuse remote auth and support the ChatGPT device-code flow. |
-| Approvals | Command, file-change, permission, and structured user-input requests. |
-| Diagnostics | Context and rate-limit status, app-server warnings, feedback upload, and SSH host-key pinning. |
+| 主机发现 | 通过游标分页导入全部活动任务，不使用固定项目过滤；按任务的 `cwd` 分组项目。 |
+| 任务生命周期 | 新建、分页恢复、重命名、置顶、归档、浏览已归档任务、恢复、永久删除、派生和上下文压缩。 |
+| 回合 | 先加载最近五条完整回合，滚动到顶部时继续取更早回合并保持位置；支持发送、流式显示、追加输入、中断和全部当前 `ThreadItem` 类型。 |
+| 输入框 | 桌面式加号菜单、远端文件和目录引用、Android 图片、目标、计划模式、远端技能/插件 `$` 引用、斜杠命令、模型、推理强度、服务档位、协作模式和权限。 |
+| 命令 | `/compact`、`/feedback`、`/fork`、`/goal`、`/init`、`/mcp`、`/model`、`/new`、`/plan`、`/reasoning`、`/review-mode`、`/status` 和任务管理快捷项。 |
+| 目标 | 可移除的“下一条消息作为目标”标记，以及读取、创建、编辑、暂停、恢复、清除和继续远端目标。 |
+| 审查和文件变更 | 发起代码审查，并在对话中显示可展开的结构化文件修改摘要；没有独立 Changes 页。 |
+| 长对话 | 打开时定位到最新消息，向上滚动分页加载，插入历史时保持可见位置，离开底部时显示回到最新消息。 |
+| MCP | 显示服务器、工具和资源状态，启动 OAuth，观察完成事件并重新加载远端 MCP 配置。 |
+| 认证 | 复用远端认证，并支持远端 ChatGPT 设备码登录。 |
+| 审批 | 命令、文件变更、权限和结构化用户输入请求。 |
+| 诊断 | 上下文和速率限制状态、app-server 警告、反馈提交和 SSH 主机指纹固定。 |
+| `0.165.0` 协作模式 | 支持必填 `name` 与可空 `mode`，默认模式会跳过空 `mode`，发送时不构造非法空值。 |
+| `0.165.0` 函数输出 | 解析并显示 `functionCallOutput`，支持文本、图片、音频和文件标识内容。 |
 
-## Remaining gaps
+## 尚未实现
 
-### High priority
+### 高优先级
 
-- Rich Git review: automatic base-branch discovery, per-file navigation, syntax-highlighted diffs, inline comments, commit/revert actions, and detached review delivery.
-- Edit or undo a historical turn. The protocol's `thread/rollback` is deprecated and does not restore repository changes; a correct implementation must restore both conversation history and affected files.
-- Background terminal sessions and interactive terminal input. Command events render, but Android has no terminal panel for long-running PTY sessions.
-- MCP extended-form elicitation, MCP App HTML surfaces, resource browsing, and direct MCP tool invocation.
-- Plugin management: marketplace browsing, install/uninstall/update, authentication policy, plugin details, and sharing. Android currently loads installed plugins for `$` mentions only. The public protocol marks several plugin management methods as under development.
+1. 完整 Git 审查：自动发现基准分支、逐文件导航、语法高亮 Diff、行内评论、提交/回退和独立审查交付。
+2. 编辑或撤销历史回合。协议中的 `thread/rollback` 已弃用，而且只回滚对话不会恢复仓库文件。
+3. 后台终端会话和交互式终端输入。命令事件可以显示，但没有长期 PTY 终端面板。
+4. MCP 扩展表单、MCP App HTML、资源浏览和直接调用 MCP 工具。
+5. 插件管理：市场浏览、安装/卸载/更新、认证策略、详情和分享。当前只加载已安装插件供 `$` 引用；部分插件管理协议仍标记为开发中。
 
-### Composer and media
+### 输入框和媒体
 
-- Fuzzy remote file search across the project. The current picker browses remote directories and inserts `@file` references, but it does not yet provide desktop's ranked workspace-wide search.
-- Generic file attachments, remote-path images, audio attachments, dictation, realtime voice, and rich generated-media viewers.
-- Temporary `/side` chats, Memories controls, personality selection, and auto-review-denial approval shortcuts.
-- Historical-turn fork selection through `thread/fork.lastTurnId`; current fork copies the complete task.
+1. 项目范围的模糊文件搜索。当前只能浏览远端目录并插入 `@file` 引用。
+2. 通用文件附件、远端路径图片、音频附件、听写、实时语音和富媒体查看器。
+3. 临时 `/side` 对话、记忆控制、人格选择和自动审查拒绝快捷操作。
+4. 指定历史回合派生的 `thread/fork.lastTurnId`；当前派生会复制完整任务。
 
-### Settings and account
+### 设置和账号
 
-- Enable/disable skills, add extra skill roots, view full skill/plugin details, and manage Hooks.
-- Full remote config editor, experimental feature switches, account logout, usage history, earned rate-limit resets, and workspace messages.
-- Notification preferences, desktop automations, app connectors, and Remote Control relay pairing.
+1. 启停技能、额外技能根目录、技能/插件完整详情和 Hooks 管理。
+2. 完整远端配置编辑、实验功能开关、账号退出、用量历史、额度重置和工作区消息。
+3. 通知偏好、桌面自动化、连接器和 Remote Control 配对。
 
-### SSH and platform integration
+### SSH 和平台集成
 
-- OpenSSH config expansion, ProxyJump, SSH agent or hardware-key authentication, and managed relay pairing.
-- Remote file open-in-editor actions, deep links, desktop notifications, and Android share-sheet integration.
+1. OpenSSH 配置展开、ProxyJump、SSH Agent 或硬件密钥认证、托管中继配对。
+2. 远端文件用编辑器打开、深链、桌面通知和 Android 分享面板。
 
-These gaps should not be represented as working until their app-server request,
-notification handling, UI state, error state, and non-destructive verification
-are all implemented.
+以上缺口在请求、通知、界面状态、错误状态和非破坏性黑盒验证全部完成前，不应标记为可用。
