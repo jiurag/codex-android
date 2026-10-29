@@ -16,6 +16,8 @@ val releaseSigningValues = listOf(
     releaseKeyPassword,
 )
 val hasReleaseSigning = releaseSigningValues.all { !it.isNullOrBlank() }
+val useReleaseSigningForDebug =
+    providers.gradleProperty("useReleaseSigningForDebug").orNull?.toBoolean() == true
 
 require(releaseSigningValues.none { !it.isNullOrBlank() } || hasReleaseSigning) {
     "Release signing requires all CODEX_REMOTE_KEYSTORE_* and CODEX_REMOTE_KEY_* variables."
@@ -29,11 +31,16 @@ android {
         applicationId = "com.codex.remote"
         minSdk = 26
         targetSdk = 35
-        versionCode = 20
-        versionName = "1.0.11"
+        versionCode = 21
+        versionName = "1.0.12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+        buildConfigField(
+            "String",
+            "UPDATE_MANIFEST_URL",
+            "\"https://github.com/jiurag/codex-android/releases/latest/download/latest.json\"",
+        )
     }
 
     signingConfigs {
@@ -48,6 +55,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (hasReleaseSigning && useReleaseSigningForDebug) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             isMinifyEnabled = true
             if (hasReleaseSigning) {

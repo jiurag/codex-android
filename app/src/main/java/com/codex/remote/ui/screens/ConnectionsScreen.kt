@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import com.codex.remote.BuildConfig
 import com.codex.remote.R
 import com.codex.remote.domain.AppUiState
 import com.codex.remote.domain.AuthType
@@ -79,6 +80,7 @@ import com.codex.remote.ui.components.CodexTopBar
 import com.codex.remote.ui.components.codexTextFieldColors
 import com.codex.remote.ui.icons.CodexIcons
 import com.codex.remote.ui.theme.CodexMidnight
+import com.codex.remote.domain.UpdatePhase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,6 +93,7 @@ fun ConnectionsScreen(
     onConnect: (SavedConnection) -> Unit,
     onSave: (ConnectionDraft, Boolean) -> Unit,
     onCloseEditor: () -> Unit,
+    onCheckForUpdates: () -> Unit,
     onDismissNotice: () -> Unit,
 ) {
     val isDarkTheme = isSystemInDarkTheme()
@@ -139,6 +142,22 @@ fun ConnectionsScreen(
                         }
                     },
                     actions = {
+                        if (state.update.phase == UpdatePhase.CHECKING) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.padding(horizontal = 13.dp).size(22.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            IconButton(
+                                onClick = onCheckForUpdates,
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Icon(
+                                    CodexIcons.Refresh,
+                                    contentDescription = "检查更新",
+                                )
+                            }
+                        }
                         if (hasConnections) {
                             IconButton(onClick = onAdd, modifier = Modifier.size(48.dp)) {
                                 Icon(CodexIcons.Add, contentDescription = "添加连接")
@@ -203,6 +222,12 @@ fun ConnectionsScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Text(
+                            "Codex ${BuildConfig.VERSION_NAME}",
+                            modifier = Modifier.padding(start = 25.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -257,6 +282,12 @@ private fun EmptyConnections(onAdd: () -> Unit) {
         Spacer(Modifier.height(18.dp))
         Text(
             stringResource(R.string.misans_attribution),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Codex ${BuildConfig.VERSION_NAME}",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

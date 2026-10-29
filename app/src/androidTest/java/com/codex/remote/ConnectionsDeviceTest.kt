@@ -49,6 +49,7 @@ class ConnectionsDeviceTest {
                         onConnect = {},
                         onSave = { _, _ -> },
                         onCloseEditor = {},
+                        onCheckForUpdates = {},
                         onDismissNotice = {},
                     )
                 }

@@ -87,8 +87,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          APK="dist/codex-remote-${VERSION_NAME}-release.apk"
-          AAB="dist/codex-remote-${VERSION_NAME}-release.aab"
+          APK="dist/codex-android-${VERSION_NAME}-release.apk"
+          AAB="dist/codex-android-${VERSION_NAME}-release.aab"
           cp app/build/outputs/apk/release/app-release.apk "$APK"
           cp app/build/outputs/bundle/release/app-release.aab "$AAB"
           (
@@ -101,6 +101,26 @@ jobs:
           "$APKSIGNER" verify --verbose "$APK"
           jarsigner -verify "$AAB"
 
+          APK_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          APK_SIZE="$(stat -c '%s' "$APK")"
+          jq -n \
+            --argjson formatVersion 1 \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg versionName "$VERSION_NAME" \
+            --arg apkUrl "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/$(basename "$APK")" \
+            --arg sha256 "$APK_SHA256" \
+            --argjson sizeBytes "$APK_SIZE" \
+            --arg changelog "包含最新修复与使用体验改进。" \
+            '{
+              formatVersion: $formatVersion,
+              versionCode: $versionCode,
+              versionName: $versionName,
+              apkUrl: $apkUrl,
+              sha256: $sha256,
+              sizeBytes: $sizeBytes,
+              changelog: $changelog
+            }' > dist/latest.json
+
           {
             echo "# Codex ${VERSION_NAME} (${VERSION_CODE})"
             echo
@@ -108,6 +128,7 @@ jobs:
             echo
             echo "- 提交：\`${GITHUB_SHA}\`"
             echo "- 应用包名：\`com.codex.remote\`"
+            echo "- 应用内更新清单：\`latest.json\`"
             echo "- APK：已通过 APK Signature Scheme 校验"
             echo "- AAB：已通过 JAR 签名校验"
             echo
@@ -121,7 +142,7 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: codex-remote-${{ env.VERSION_NAME }}
+          name: codex-android-${{ env.VERSION_NAME }}
           path: dist/*
           if-no-files-found: error
           retention-days: 30
@@ -134,8 +155,9 @@ jobs:
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" \
-              "dist/codex-remote-${VERSION_NAME}-release.apk" \
-              "dist/codex-remote-${VERSION_NAME}-release.aab" \
+              "dist/codex-android-${VERSION_NAME}-release.apk" \
+              "dist/codex-android-${VERSION_NAME}-release.aab" \
+              "dist/latest.json" \
               "dist/SHA256SUMS.txt" \
               --clobber
             gh release edit "$TAG" \
@@ -143,8 +165,9 @@ jobs:
               --notes-file dist/RELEASE_NOTES.md
           else
             gh release create "$TAG" \
-              "dist/codex-remote-${VERSION_NAME}-release.apk" \
-              "dist/codex-remote-${VERSION_NAME}-release.aab" \
+              "dist/codex-android-${VERSION_NAME}-release.apk" \
+              "dist/codex-android-${VERSION_NAME}-release.aab" \
+              "dist/latest.json" \
               "dist/SHA256SUMS.txt" \
               --target "$GITHUB_SHA" \
               --title "Codex ${VERSION_NAME}" \

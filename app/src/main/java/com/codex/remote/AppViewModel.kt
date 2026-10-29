@@ -10,7 +10,12 @@ import com.codex.remote.data.ssh.SshAppServerTransportFactory
 import com.codex.remote.data.ssh.UnknownHostKeyException
 import com.codex.remote.data.ssh.isRemoteConnectionLost
 import com.codex.remote.data.store.ConnectionStore
+import com.codex.remote.data.update.ApkInstaller
+import com.codex.remote.data.update.GitHubUpdateClient
+import com.codex.remote.data.update.InstallLaunchResult
+import com.codex.remote.data.update.UpdateManifest
 import com.codex.remote.domain.AppUiState
+import com.codex.remote.domain.AppUpdateState
 import com.codex.remote.domain.ApprovalKind
 import com.codex.remote.domain.ConnectionDraft
 import com.codex.remote.domain.ConnectionStatus
@@ -30,6 +35,8 @@ import com.codex.remote.domain.SavedConnection
 import com.codex.remote.domain.TimelineItem
 import com.codex.remote.domain.TimelineKind
 import com.codex.remote.domain.ThreadGoalStatus
+import com.codex.remote.domain.UpdateFailureStage
+import com.codex.remote.domain.UpdatePhase
 import com.codex.remote.domain.groupThreadsByProject
 import com.codex.remote.domain.mergeTimelineHistory
 import com.codex.remote.domain.composerToken
@@ -47,11 +54,14 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.io.File
 import java.util.UUID
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val store = ConnectionStore(application)
     private val transportFactory = SshAppServerTransportFactory(application)
+    private val updateClient = GitHubUpdateClient(application)
+    private val apkInstaller = ApkInstaller(application)
     private val _state = MutableStateFlow(AppUiState())
     val state: StateFlow<AppUiState> = _state.asStateFlow()
 
@@ -59,8 +69,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var ccSwitchStatusClient: CcSwitchStatusClient? = null
     private var eventJob: Job? = null
     private var connectionMonitorJob: Job? = null
+    private var updateJob: Job? = null
     private var didRestoreLastConnection = false
     private val startedButUnlistedThreads = linkedMapOf<String, RemoteThread>()
+    private var pendingUpdate: UpdateManifest? = null
+    private var downloadedUpdateFile: File? = null
 
     init {
         viewModelScope.launch {
@@ -91,6 +104,208 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 restoreConnection?.let(::connect)
             }
+        }
+        checkForUpdates()
+    }
+
+    fun checkForUpdates(manual: Boolean = false) {
+        val current = _state.value.update
+        if (current.phase == UpdatePhase.CHECKING || current.phase == UpdatePhase.DOWNLOADING) {
+            if (manual) {
+                _state.update { it.copy(update = it.update.copy(showDialog = true)) }
+            }
+            return
+        }
+        if (current.phase == UpdatePhase.AVAILABLE || current.phase == UpdatePhase.READY) {
+            if (manual) {
+                _state.update { it.copy(update = it.update.copy(showDialog = true)) }
+            }
+            return
+        }
+
+        updateJob?.cancel()
+        pendingUpdate = null
+        downloadedUpdateFile = null
+        _state.update {
+            it.copy(update = AppUpdateState(phase = UpdatePhase.CHECKING, showDialog = manual))
+        }
+        updateJob = viewModelScope.launch {
+            runCatching {
+                updateClient.findUpdate(
+                    manifestUrl = BuildConfig.UPDATE_MANIFEST_URL,
+                    currentVersionCode = BuildConfig.VERSION_CODE,
+                )
+            }.onSuccess { update ->
+                if (update == null) {
+                    _state.update {
+                        it.copy(
+                            update = AppUpdateState(
+                                phase = UpdatePhase.UP_TO_DATE,
+                                showDialog = manual,
+                            ),
+                            notice = if (manual) {
+                                "当前已是最新版本 ${BuildConfig.VERSION_NAME}"
+                            } else {
+                                it.notice
+                            },
+                        )
+                    }
+                } else {
+                    pendingUpdate = update
+                    _state.update {
+                        it.copy(
+                            update = AppUpdateState(
+                                phase = UpdatePhase.AVAILABLE,
+                                versionCode = update.versionCode,
+                                versionName = update.versionName,
+                                changelog = update.changelog.ifBlank { null },
+                                showDialog = true,
+                            ),
+                        )
+                    }
+                }
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(
+                        update = AppUpdateState(
+                            phase = UpdatePhase.ERROR,
+                            error = updateErrorMessage(error),
+                            failureStage = UpdateFailureStage.CHECK,
+                            showDialog = manual,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun downloadUpdate() {
+        val update = pendingUpdate
+        if (update == null) {
+            checkForUpdates(manual = true)
+            return
+        }
+        if (_state.value.update.phase == UpdatePhase.DOWNLOADING) return
+
+        updateJob?.cancel()
+        downloadedUpdateFile = null
+        _state.update {
+            it.copy(
+                update = AppUpdateState(
+                    phase = UpdatePhase.DOWNLOADING,
+                    versionCode = update.versionCode,
+                    versionName = update.versionName,
+                    changelog = update.changelog.ifBlank { null },
+                    progressPercent = 0,
+                    showDialog = true,
+                ),
+            )
+        }
+        updateJob = viewModelScope.launch {
+            runCatching {
+                updateClient.downloadAndVerify(
+                    manifest = update,
+                    currentVersionCode = BuildConfig.VERSION_CODE,
+                    onProgress = { progress ->
+                        _state.update { state ->
+                            state.copy(
+                                update = state.update.copy(progressPercent = progress),
+                            )
+                        }
+                    },
+                )
+            }.onSuccess { file ->
+                downloadedUpdateFile = file
+                _state.update {
+                    it.copy(
+                        update = it.update.copy(
+                            phase = UpdatePhase.READY,
+                            progressPercent = 100,
+                            error = null,
+                            failureStage = null,
+                            showDialog = true,
+                        ),
+                    )
+                }
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(
+                        update = it.update.copy(
+                            phase = UpdatePhase.ERROR,
+                            error = updateErrorMessage(error),
+                            failureStage = UpdateFailureStage.DOWNLOAD,
+                            showDialog = true,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun installDownloadedUpdate() {
+        val updateFile = downloadedUpdateFile
+        if (updateFile == null) {
+            downloadUpdate()
+            return
+        }
+        runCatching {
+            apkInstaller.install(updateFile)
+        }.onSuccess { result ->
+            when (result) {
+                InstallLaunchResult.LAUNCHED -> _state.update {
+                    it.copy(
+                        update = it.update.copy(
+                            showDialog = false,
+                            installPermissionRequired = false,
+                        ),
+                    )
+                }
+                InstallLaunchResult.PERMISSION_REQUIRED -> _state.update {
+                    it.copy(
+                        update = it.update.copy(
+                            showDialog = true,
+                            installPermissionRequired = true,
+                        ),
+                        notice = "请允许 Codex 安装未知应用，然后返回并再次点击安装。",
+                    )
+                }
+                InstallLaunchResult.FILE_MISSING -> _state.update {
+                    it.copy(
+                        update = it.update.copy(
+                            phase = UpdatePhase.ERROR,
+                            error = "更新包已被系统清理，请重新下载。",
+                            failureStage = UpdateFailureStage.DOWNLOAD,
+                            showDialog = true,
+                        ),
+                    )
+                }
+            }
+        }.onFailure { error ->
+            _state.update {
+                it.copy(
+                    update = it.update.copy(
+                        phase = UpdatePhase.ERROR,
+                        error = updateErrorMessage(error),
+                        failureStage = UpdateFailureStage.INSTALL,
+                        showDialog = true,
+                    ),
+                )
+            }
+        }
+    }
+
+    fun retryUpdate() {
+        when (_state.value.update.failureStage) {
+            UpdateFailureStage.CHECK -> checkForUpdates(manual = true)
+            UpdateFailureStage.DOWNLOAD -> downloadUpdate()
+            UpdateFailureStage.INSTALL -> installDownloadedUpdate()
+            null -> checkForUpdates(manual = true)
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        _state.update {
+            it.copy(update = it.update.copy(showDialog = false))
         }
     }
 
@@ -1855,8 +2070,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun updateErrorMessage(error: Throwable): String {
+        val message = generateSequence(error) { it.cause }
+            .mapNotNull { it.message }
+            .firstOrNull { it.isNotBlank() }
+        return when {
+            message == null -> "更新失败，请稍后重试。"
+            message.contains("HTTP 404", ignoreCase = true) ->
+                "没有找到更新信息，请稍后重试。"
+            message.contains("timed out", ignoreCase = true) ->
+                "连接 GitHub 超时，请检查网络后重试。"
+            message.contains("Unable to resolve host", ignoreCase = true) ->
+                "无法连接 GitHub，请检查网络后重试。"
+            else -> message
+        }
+    }
+
     override fun onCleared() {
         connectionMonitorJob?.cancel()
+        updateJob?.cancel()
         rpc?.close()
         super.onCleared()
     }

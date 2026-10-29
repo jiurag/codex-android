@@ -397,6 +397,34 @@ data class ApprovalRequest(
 
 enum class ConnectionStatus { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
 
+enum class UpdatePhase {
+    IDLE,
+    CHECKING,
+    UP_TO_DATE,
+    AVAILABLE,
+    DOWNLOADING,
+    READY,
+    ERROR,
+}
+
+enum class UpdateFailureStage {
+    CHECK,
+    DOWNLOAD,
+    INSTALL,
+}
+
+data class AppUpdateState(
+    val phase: UpdatePhase = UpdatePhase.IDLE,
+    val versionCode: Int? = null,
+    val versionName: String? = null,
+    val changelog: String? = null,
+    val progressPercent: Int? = null,
+    val error: String? = null,
+    val failureStage: UpdateFailureStage? = null,
+    val showDialog: Boolean = false,
+    val installPermissionRequired: Boolean = false,
+)
+
 data class AppUiState(
     val savedConnections: List<SavedConnection> = emptyList(),
     val activeConnection: SavedConnection? = null,
@@ -462,6 +490,7 @@ data class AppUiState(
     val editingConnection: SavedConnection? = null,
     val isBusy: Boolean = false,
     val notice: String? = null,
+    val update: AppUpdateState = AppUpdateState(),
 )
 
 internal fun AppUiState.withThreadRenamed(threadId: String, name: String): AppUiState {

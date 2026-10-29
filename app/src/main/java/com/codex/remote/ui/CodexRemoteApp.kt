@@ -9,6 +9,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.codex.remote.AppViewModel
+import com.codex.remote.BuildConfig
+import com.codex.remote.ui.components.CodexUpdateDialog
 import com.codex.remote.ui.screens.ConnectionsScreen
 import com.codex.remote.ui.screens.WorkspaceScreen
 
@@ -31,6 +33,7 @@ fun CodexRemoteApp(viewModel: AppViewModel) {
             onConnect = viewModel::connect,
             onSave = viewModel::saveConnection,
             onCloseEditor = viewModel::closeEditor,
+            onCheckForUpdates = { viewModel.checkForUpdates(manual = true) },
             onDismissNotice = viewModel::clearNotice,
         )
     } else {
@@ -78,4 +81,13 @@ fun CodexRemoteApp(viewModel: AppViewModel) {
             onDismissNotice = viewModel::clearNotice,
         )
     }
+
+    CodexUpdateDialog(
+        state = state.update,
+        currentVersionName = BuildConfig.VERSION_NAME,
+        onDismiss = viewModel::dismissUpdateDialog,
+        onDownload = viewModel::downloadUpdate,
+        onInstall = viewModel::installDownloadedUpdate,
+        onRetry = viewModel::retryUpdate,
+    )
 }
