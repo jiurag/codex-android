@@ -32,13 +32,38 @@ class CodexMessageLocalizationTest {
     }
 
     @Test
-    fun leavesChineseRemoteMessagesUnchangedAndHidesUnknownEnglishDetails() {
+    fun translatesObservedConfigWarningsAndPreservesUnknownDetails() {
         val message = "远端 Codex 提示：配置已重新加载。"
 
         assertEquals(message, localizeCodexMessage(message))
         assertEquals(
-            "远端 Codex 返回通用提示，请在服务器端的 Codex 日志中查看技术详情。",
+            "远端 Codex 忽略了 1 项无法识别的配置。请检查服务器上的 Codex 配置文件。",
             localizeCodexMessage("Codex is ignoring 1 unrecognized configuration setting."),
+        )
+        assertEquals(
+            "远端 Codex 忽略了 1 项无法识别的配置。" +
+                "配置项 disable_response_storage 不会生效" +
+                "（来源：user，文件：/root/.codex/config.toml）。" +
+                "请检查服务器上的 Codex 配置文件。",
+            localizeCodexMessage(
+                """
+                Codex is ignoring 1 unrecognized configuration setting.
+                user (/root/.codex/config.toml): `disable_response_storage` is ignored.
+                """.trimIndent(),
+            ),
+        )
+        assertEquals(
+            "远端 Codex 提示：Provider returned HTTP 429.",
+            localizeCodexMessage("Provider returned HTTP 429."),
+        )
+        assertEquals(
+            "远端 Codex 忽略了无法识别的配置。" +
+                "配置项 disable_response_storage 不会生效" +
+                "（来源：user，文件：/root/.codex/config.toml）。" +
+                "请检查服务器上的 Codex 配置文件。",
+            localizeCodexDiagnostic(
+                "user (/root/.codex/config.toml): `disable_response_storage` is ignored.",
+            ),
         )
     }
 

@@ -12,34 +12,28 @@ private val AUTHORIZATION_VALUE = Regex(
     """\bauthorization\s*:\s*([^)]+)""",
     RegexOption.IGNORE_CASE,
 )
-private val LATIN_WORD = Regex("""[A-Za-z]{3,}""")
-private val PRODUCT_NAMES = listOf(
-    "ChatGPT",
-    "OpenAI",
-    "DeepSeek",
-    "CC Switch",
-    "Codex",
-    "Android",
-    "Windows",
-    "Linux",
-    "macOS",
-    "OAuth",
-    "MCP",
-    "SSH",
-    "API",
-    "CLI",
-    "PEM",
-    "Plus",
-    "Pro",
+private val IGNORED_CONFIG_COUNT = Regex(
+    """Codex\s+is\s+ignoring\s+(\d+)\s+unrecogni[sz]ed\s+configuration\s+settings?\.""",
+    RegexOption.IGNORE_CASE,
 )
+private val IGNORED_CONFIG_DETAIL = Regex(
+    """^\s*(.+?)\s*\((.+?)\):\s*`?([A-Za-z0-9_.-]+)`?\s+is\s+ignored\.?\s*$""",
+    setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE),
+)
+private val LATIN_WORD = Regex("""[A-Za-z]{3,}""")
+private val CJK_CHARACTER = Regex("""[\u3400-\u9FFF]""")
 
 internal fun localizeCodexMessage(message: String): String {
     val normalized = message.trim()
     if (normalized.isEmpty()) return normalized
+    localizeIgnoredConfigWarning(normalized)?.let { return it }
     if (!AUTO_REVIEW_MARKER.containsMatchIn(normalized)) {
-        return when {
-            !containsUntranslatedEnglish(normalized) -> normalized
-            else -> "远端 Codex 返回通用提示，请在服务器端的 Codex 日志中查看技术详情。"
+        return if (LATIN_WORD.containsMatchIn(normalized) &&
+            !CJK_CHARACTER.containsMatchIn(normalized)
+        ) {
+            "远端 Codex 提示：$normalized"
+        } else {
+            normalized
         }
     }
 
@@ -87,6 +81,9 @@ internal fun localizeCodexMessage(message: String): String {
     }
 }
 
+internal fun localizeCodexDiagnostic(message: String): String? =
+    localizeIgnoredConfigWarning(message.trim())
+
 internal fun localizeCodexLabel(value: String): String {
     val normalized = value.trim()
     return when (normalized.lowercase()) {
@@ -131,9 +128,38 @@ private fun localizeAuthorization(value: String): String = when (value.lowercase
     else -> value
 }
 
-private fun containsUntranslatedEnglish(value: String): Boolean {
-    val residual = PRODUCT_NAMES.fold(value) { text, product ->
-        text.replace(product, "", ignoreCase = true)
+private fun localizeIgnoredConfigWarning(message: String): String? {
+    val count = IGNORED_CONFIG_COUNT.find(message)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.toIntOrNull()
+    val detail = IGNORED_CONFIG_DETAIL.find(message)
+    if (count == null && detail == null) return null
+
+    return buildString {
+        if (count != null) {
+            append("远端 Codex 忽略了 ")
+            append(count)
+            append(" 项无法识别的配置。")
+        } else {
+            append("远端 Codex 忽略了无法识别的配置。")
+        }
+        detail?.let { match ->
+            val source = match.groupValues[1].trim()
+            val path = match.groupValues[2].trim()
+            val key = match.groupValues[3].trim()
+            append("配置项 ")
+            append(key)
+            append(" 不会生效")
+            if (source.isNotBlank() || path.isNotBlank()) {
+                append("（")
+                if (source.isNotBlank()) append("来源：$source")
+                if (source.isNotBlank() && path.isNotBlank()) append("，")
+                if (path.isNotBlank()) append("文件：$path")
+                append("）")
+            }
+            append("。")
+        }
+        append("请检查服务器上的 Codex 配置文件。")
     }
-    return LATIN_WORD.containsMatchIn(residual)
 }

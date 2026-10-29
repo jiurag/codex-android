@@ -426,6 +426,30 @@ class WorkspaceDeviceTest {
     }
 
     @Test
+    fun remoteConfigWarningIsDisplayedWithChineseActionableDetails() {
+        val state = mutableStateOf(
+            baseState().copy(
+                notice = """
+                    Codex is ignoring 1 unrecognized configuration setting.
+                    user (/root/.codex/config.toml): `disable_response_storage` is ignored.
+                """.trimIndent(),
+            ),
+        )
+        show(state)
+
+        composeRule.onNodeWithText(
+            "远端 Codex 忽略了 1 项无法识别的配置。" +
+                "配置项 disable_response_storage 不会生效" +
+                "（来源：user，文件：/root/.codex/config.toml）。" +
+                "请检查服务器上的 Codex 配置文件。",
+        ).assertIsDisplayed()
+        composeRule.onAllNodesWithText(
+            "远端 Codex 返回通用提示",
+            substring = true,
+        ).assertCountEquals(0)
+    }
+
+    @Test
     fun remoteModelMetadataAndMcpCountsAreDisplayedInSimplifiedChinese() {
         val base = baseState()
         val model = base.models.single().copy(

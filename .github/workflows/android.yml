@@ -110,7 +110,7 @@ jobs:
             --arg apkUrl "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/$(basename "$APK")" \
             --arg sha256 "$APK_SHA256" \
             --argjson sizeBytes "$APK_SIZE" \
-            --arg changelog "包含最新修复与使用体验改进。" \
+            --arg changelog "$(cat release/LATEST_CHANGELOG.txt)" \
             '{
               formatVersion: $formatVersion,
               versionCode: $versionCode,

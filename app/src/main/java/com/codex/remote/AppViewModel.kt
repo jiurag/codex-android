@@ -1809,11 +1809,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         it.copy(notice = localizeCodexMessage(event.message))
                     }
                     is AppServerEvent.Diagnostic -> {
-                        if (event.message.contains("not found", ignoreCase = true) ||
-                            event.message.contains("not recognized", ignoreCase = true)
-                        ) {
-                            _state.update {
-                                it.copy(notice = "远端登录环境找不到 Codex 命令，请检查服务器上的 Codex CLI 安装和 PATH 配置。")
+                        val configWarning = localizeCodexDiagnostic(event.message)
+                        when {
+                            configWarning != null -> _state.update {
+                                it.copy(notice = configWarning)
+                            }
+                            event.message.contains("not found", ignoreCase = true) ||
+                                event.message.contains("not recognized", ignoreCase = true) -> _state.update {
+                                it.copy(
+                                    notice = "远端登录环境找不到 Codex 命令，请检查服务器上的 Codex CLI 安装和 PATH 配置。",
+                                )
                             }
                         }
                     }
