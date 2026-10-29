@@ -260,6 +260,8 @@ class WorkspaceDeviceTest {
         )
         show(state, contentWidth = 360.dp, fontScale = 1f)
 
+        composeRule.onNodeWithText("已连接").assertIsDisplayed()
+        composeRule.onAllNodesWithText("DeepSeek V4 Flash").assertCountEquals(0)
         assertComposerControlsInsideSurface()
         val add = composeRule.onNodeWithTag(COMPOSER_ADD).fetchSemanticsNode().boundsInRoot
         val context = composeRule.onNodeWithTag(COMPOSER_CONTEXT).fetchSemanticsNode().boundsInRoot

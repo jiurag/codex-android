@@ -857,9 +857,8 @@ private fun WorkspaceContent(
     val headerTitle = currentThread?.title
         ?: state.projects.firstOrNull { it.path == state.selectedProjectPath }?.name
         ?: state.activeConnection?.name.orEmpty()
-    val selectedModelName = state.models.firstOrNull { it.id == state.selectedModel }?.displayName
     val headerSubtitle = when (state.connectionStatus) {
-        ConnectionStatus.CONNECTED -> listOfNotNull("已连接", selectedModelName).joinToString(" · ")
+        ConnectionStatus.CONNECTED -> "已连接"
         ConnectionStatus.CONNECTING -> "正在通过 SSH 连接"
         ConnectionStatus.ERROR -> "连接失败"
         ConnectionStatus.DISCONNECTED -> "已断开"
